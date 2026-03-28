@@ -97,6 +97,19 @@
             <button id="finish-button" type="button">Ok, GANE.<br>Finaliza el juego</button>
           </div>
           <button id="audio-toggle-button" type="button" class="secondary-button audio-toggle-button" aria-pressed="false">🔈 OFF</button>
+          <button id="undo-toggle-button" type="button" class="undo-toggle-button">Undo</button>
+          <section id="undo-panel" class="undo-panel hidden" aria-labelledby="undo-title">
+            <div class="undo-card">
+              <div class="undo-header">
+                <div>
+                  <p class="initials-eyebrow">History</p>
+                  <h3 id="undo-title">Undo</h3>
+                </div>
+                <button id="close-undo-button" type="button" class="secondary-button replay-close-button">Cerrar</button>
+              </div>
+              <div id="undo-list" class="undo-list"></div>
+            </div>
+          </section>
           <section id="replay-viewer" class="replay-viewer hidden" aria-labelledby="replay-title">
             <div class="replay-card">
               <div class="replay-header">

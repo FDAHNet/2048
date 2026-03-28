@@ -21,6 +21,10 @@ const restartButton = document.getElementById("restart-button");
 const finishButton = document.getElementById("finish-button");
 const gameOverOverlayElement = document.getElementById("game-over-overlay");
 const audioToggleButton = document.getElementById("audio-toggle-button");
+const undoToggleButton = document.getElementById("undo-toggle-button");
+const undoPanelElement = document.getElementById("undo-panel");
+const closeUndoButton = document.getElementById("close-undo-button");
+const undoListElement = document.getElementById("undo-list");
 const replayIndicatorElement = document.getElementById("replay-indicator");
 const boardSizeSelect = document.getElementById("board-size");
 const recordsPanelElement = document.getElementById("records-panel");
@@ -72,6 +76,7 @@ let pendingGlobalRecord = null;
 let journalEntries = [];
 let currentReplay = null;
 let recordsPanelOpen = false;
+let undoPanelOpen = false;
 let replayMode = false;
 let replayTimer = null;
 let replayResumeState = null;
@@ -90,6 +95,8 @@ let bestScoreBurstTimer = null;
 let gameTimerStartedAt = 0;
 let gameTimerInterval = null;
 let lastTimerMilestone = 0;
+let moveHistory = [];
+let moveSequence = 0;
 const ARCADE_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 const GLOBAL_MODES = ["4x4", "5x5", "6x6", "8x8"];
 const globalRecordsElements = Object.fromEntries(
@@ -378,6 +385,8 @@ function startGame(options = {}) {
   pendingGlobalRecord = null;
   journalEntries = [];
   currentReplay = null;
+  moveHistory = [];
+  moveSequence = 0;
   globalRecordFanfarePlayed = false;
   globalRecordsLoaded = false;
   clearBestScoreCelebration();
@@ -398,6 +407,7 @@ function startGame(options = {}) {
   }
   render();
   renderJournal();
+  renderUndoHistory();
   renderRecords();
   if (!demoMode) {
     renderGlobalRecordsLoading();
@@ -513,6 +523,22 @@ function cloneGameState(state) {
   };
 }
 
+function cloneReplay(replay) {
+  if (!replay) return null;
+  return {
+    ...replay,
+    start: replay.start.map((spawn) => ({ ...spawn })),
+    turns: replay.turns.map((turn) => ({
+      ...turn,
+      spawn: turn.spawn ? { ...turn.spawn } : null,
+    })),
+  };
+}
+
+function cloneJournalEntries(entries) {
+  return entries.map((entry) => ({ ...entry }));
+}
+
 function loadRecords() {
   const raw = localStorage.getItem(getRecordsKey());
   if (!raw) return [];
@@ -552,6 +578,52 @@ function isRecordScore(score) {
 
 function renderRecords() {
   return;
+}
+
+function setUndoPanelOpen(nextOpen) {
+  undoPanelOpen = nextOpen && moveHistory.length > 0;
+  undoPanelElement.classList.toggle("hidden", !undoPanelOpen);
+  undoToggleButton.textContent = undoPanelOpen ? "Ocultar undo" : "Undo";
+}
+
+function renderUndoHistory() {
+  if (!undoListElement) return;
+  undoListElement.innerHTML = "";
+
+  if (!moveHistory.length) {
+    const empty = document.createElement("div");
+    empty.className = "undo-entry-empty";
+    empty.textContent = "Todavia no hay movimientos guardados.";
+    undoListElement.appendChild(empty);
+    undoToggleButton.disabled = true;
+    if (undoPanelOpen) setUndoPanelOpen(false);
+    return;
+  }
+
+  undoToggleButton.disabled = false;
+
+  moveHistory.slice().reverse().forEach((entry) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "undo-entry";
+    button.addEventListener("click", () => restoreHistoryEntry(entry.id));
+
+    const step = document.createElement("strong");
+    step.textContent = String(entry.step);
+
+    const meta = document.createElement("div");
+    const title = document.createElement("div");
+    title.textContent = entry.label;
+    const subtitle = document.createElement("small");
+    subtitle.textContent = `${entry.score} puntos | ${entry.elapsedText}`;
+    meta.append(title, subtitle);
+
+    const target = document.createElement("span");
+    target.textContent = "Ir";
+
+    button.append(step, meta, target);
+    undoListElement.appendChild(button);
+  });
 }
 
 function renderJournal() {
@@ -659,6 +731,63 @@ function animateJournalFlight(entry) {
   targetEntry.classList.add("journal-entry-flash");
   targetEntry.addEventListener("animationend", () => targetEntry.classList.remove("journal-entry-flash"), { once: true });
   flight.addEventListener("animationend", () => flight.remove(), { once: true });
+}
+
+function pushHistoryEntry(direction) {
+  if (demoMode || replayMode) return;
+  moveSequence += 1;
+  const elapsedMs = Date.now() - gameTimerStartedAt;
+  moveHistory.push({
+    id: `history-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    step: moveSequence,
+    direction,
+    label: `Paso ${moveSequence} · ${getDirectionLabel(direction)}`,
+    score: gameState.score,
+    elapsedMs,
+    elapsedText: formatElapsedTime(elapsedMs),
+    state: cloneGameState(gameState),
+    journalEntries: cloneJournalEntries(journalEntries),
+    currentReplay: cloneReplay(currentReplay),
+    nextTileId,
+    globalRecordFanfarePlayed,
+    recordLeaderActive: bestScoreCardElement?.classList.contains("record-leader") || false,
+  });
+  if (moveHistory.length > MAX_RECORDS_PER_MODE) {
+    moveHistory = moveHistory.slice(-MAX_RECORDS_PER_MODE);
+  }
+  renderUndoHistory();
+}
+
+function restoreHistoryEntry(entryId) {
+  const targetIndex = moveHistory.findIndex((entry) => entry.id === entryId);
+  if (targetIndex === -1 || replayMode || initialsEntryState.active) return;
+
+  const entry = moveHistory[targetIndex];
+  stopDemoMode();
+  discardReplayState();
+  fxLayer.innerHTML = "";
+  isAnimating = false;
+  gameState = cloneGameState(entry.state);
+  journalEntries = cloneJournalEntries(entry.journalEntries);
+  currentReplay = cloneReplay(entry.currentReplay);
+  nextTileId = entry.nextTileId;
+  globalRecordFanfarePlayed = entry.globalRecordFanfarePlayed;
+  gameTimerStartedAt = Date.now() - entry.elapsedMs;
+  moveSequence = entry.step;
+  moveHistory = moveHistory.slice(0, targetIndex + 1);
+
+  clearBestScoreCelebration();
+  if (entry.recordLeaderActive) {
+    bestScoreCardElement.classList.add("record-leader");
+  }
+
+  render();
+  renderJournal();
+  renderUndoHistory();
+  renderGameTimer();
+  setGameOverOverlay(gameState.over);
+  setStatus(`Undo hasta ${entry.label}.`);
+  setUndoPanelOpen(false);
 }
 
 function getDirectionLabel(direction) {
@@ -1567,6 +1696,7 @@ function move(direction) {
     }
     render();
     maybeCelebrateLiveGlobalRecord();
+    pushHistoryEntry(direction);
 
     epicBursts.forEach((entry) => createEpicBurst(entry.row, entry.col, entry.value));
     epicBursts
@@ -1964,6 +2094,8 @@ boardSizeSelect.addEventListener("change", () => {
 });
 finishButton.addEventListener("click", finishGame);
 audioToggleButton.addEventListener("click", toggleAudioEnabled);
+undoToggleButton.addEventListener("click", () => setUndoPanelOpen(!undoPanelOpen));
+closeUndoButton.addEventListener("click", () => setUndoPanelOpen(false));
 startAttractButton.addEventListener("click", startActualGame);
 themeSelect.addEventListener("change", (event) => applyTheme(event.target.value));
 letterUpButton.addEventListener("pointerdown", () => { if (audioEnabled) void unlockAudio(); });
