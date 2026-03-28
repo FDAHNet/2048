@@ -2,6 +2,7 @@ const MOVE_DURATION = 210;
 const EFFECT_DURATION = 5000;
 const STORAGE_PREFIX = "smooth-2048-best-score";
 const RECORDS_PREFIX = "smooth-2048-records";
+const MAX_RECORDS_PER_MODE = 10;
 const PLAYER_INITIALS_KEY = "smooth-2048-player-initials";
 const AUDIO_ENABLED_KEY = "smooth-2048-audio-enabled";
 const THEME_KEY = "smooth-2048-theme";
@@ -26,6 +27,7 @@ const toggleRecordsButton = document.getElementById("toggle-records-button");
 const globalRecordsGroupsElement = document.getElementById("global-records-groups");
 const journalListElement = document.getElementById("journal-list");
 const uiFxLayerElement = document.getElementById("ui-fx-layer");
+const starfieldElement = document.getElementById("starfield");
 const attractOverlayElement = document.getElementById("attract-overlay");
 const startAttractButton = document.getElementById("start-attract-button");
 const themeSelect = document.getElementById("theme-select");
@@ -126,6 +128,50 @@ function applyTheme(nextTheme) {
   document.body.dataset.theme = theme;
   themeSelect.value = theme;
   localStorage.setItem(THEME_KEY, theme);
+  buildStarfield();
+}
+
+function buildStarfield() {
+  if (!starfieldElement) return;
+  starfieldElement.innerHTML = "";
+
+  const layerConfigs = [
+    { count: 26, minSize: 1.2, maxSize: 2.8, drift: 32, scale: [0.8, 1.25] },
+    { count: 18, minSize: 1.8, maxSize: 4.2, drift: 44, scale: [0.9, 1.5] },
+    { count: 10, minSize: 3.2, maxSize: 5.8, drift: 58, scale: [1, 1.8] },
+  ];
+
+  layerConfigs.forEach((config, layerIndex) => {
+    const layer = document.createElement("div");
+    layer.className = "star-layer";
+    layer.style.setProperty("--drift-duration", `${config.drift}s`);
+
+    for (let index = 0; index < config.count; index += 1) {
+      const star = document.createElement("span");
+      const size = randomBetween(config.minSize, config.maxSize);
+      const scale = randomBetween(config.scale[0], config.scale[1]);
+      star.className = "star";
+      if (Math.random() > 0.68) star.classList.add("star-cross");
+      star.style.setProperty("--x", `${Math.round(Math.random() * 112)}%`);
+      star.style.setProperty("--y", `${Math.round(Math.random() * 112)}%`);
+      star.style.setProperty("--star-size", `${size.toFixed(2)}px`);
+      star.style.setProperty("--star-scale", scale.toFixed(2));
+      star.style.setProperty("--star-opacity", randomBetween(0.42, 0.95).toFixed(2));
+      star.style.setProperty("--delay", `${randomBetween(-6, 0).toFixed(2)}s`);
+      star.style.setProperty("--twinkle-duration", `${randomBetween(2.6, 5.8).toFixed(2)}s`);
+      star.style.setProperty("--pulse-duration", `${randomBetween(4.2, 8.4).toFixed(2)}s`);
+      if (layerIndex === 2) {
+        star.style.filter = "saturate(1.2)";
+      }
+      layer.appendChild(star);
+    }
+
+    starfieldElement.appendChild(layer);
+  });
+}
+
+function randomBetween(min, max) {
+  return min + Math.random() * (max - min);
 }
 
 function getBestScoreKey() {
@@ -395,7 +441,7 @@ function resolveReplayForRecord(record) {
 function isRecordScore(score) {
   if (score <= 0) return false;
   const records = loadRecords();
-  if (records.length < 10) return true;
+  if (records.length < MAX_RECORDS_PER_MODE) return true;
   return records.some((record) => score > record.score);
 }
 
@@ -504,7 +550,7 @@ function renderGlobalRecords(recordsByMode) {
   globalRecordsCache = recordsByMode;
   GLOBAL_MODES.forEach((mode) => {
     const listElement = globalRecordsElements[mode];
-    const allRecords = recordsByMode[mode] || [];
+    const allRecords = (recordsByMode[mode] || []).slice(0, MAX_RECORDS_PER_MODE);
     const records = expandedRecordsMode === mode ? allRecords : allRecords.slice(0, 4);
     listElement.innerHTML = "";
 
@@ -616,7 +662,7 @@ async function fetchGlobalRecords() {
         if (right.score !== left.score) return right.score - left.score;
         return left.isoDate.localeCompare(right.isoDate);
       });
-      grouped[mode] = grouped[mode].slice(0, 10);
+      grouped[mode] = grouped[mode].slice(0, MAX_RECORDS_PER_MODE);
     });
 
     renderGlobalRecords(grouped);
@@ -718,7 +764,7 @@ function savePendingRecord() {
     return left.isoDate.localeCompare(right.isoDate);
   });
 
-  saveRecords(records.slice(0, 10));
+  saveRecords(records.slice(0, MAX_RECORDS_PER_MODE));
   localStorage.setItem(PLAYER_INITIALS_KEY, initials);
   recordSaved = true;
   pendingGlobalRecord = {
