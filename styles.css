@@ -512,12 +512,6 @@ button:hover {
   letter-spacing: 0.04em;
 }
 
-.records-toggle-row {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 10px;
-}
-
 .initials-entry {
   margin-top: 18px;
 }

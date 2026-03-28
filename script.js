@@ -87,7 +87,7 @@ function createEmptyState() {
 }
 
 function updateAudioToggleButton() {
-  audioToggleButton.textContent = audioEnabled ? "🔊 ON" : "🔈 OFF";
+  audioToggleButton.textContent = audioEnabled ? "🔊 SONIDO ON" : "🔈 SONIDO OFF";
   audioToggleButton.classList.toggle("is-on", audioEnabled);
   audioToggleButton.setAttribute("aria-pressed", String(audioEnabled));
 }
