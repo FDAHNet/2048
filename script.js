@@ -76,6 +76,7 @@ let theme = localStorage.getItem(THEME_KEY) || "crt";
 let gameSessionId = 0;
 let expandedRecordsMode = null;
 let globalRecordsCache = Object.fromEntries(["4x4", "5x5", "6x6", "8x8"].map((mode) => [mode, []]));
+let globalRecordFanfarePlayed = false;
 const ARCADE_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 const GLOBAL_MODES = ["4x4", "5x5", "6x6", "8x8"];
 const globalRecordsElements = Object.fromEntries(
@@ -258,6 +259,7 @@ function startGame(options = {}) {
   pendingGlobalRecord = null;
   journalEntries = [];
   currentReplay = null;
+  globalRecordFanfarePlayed = false;
   gameState = createEmptyState();
   buildGrid();
   const startSpawnA = addRandomTile();
@@ -297,6 +299,19 @@ function updateScore(points) {
   gameState.score += points;
   gameState.bestScore = Math.max(gameState.bestScore, gameState.score);
   localStorage.setItem(getBestScoreKey(), String(gameState.bestScore));
+  maybeCelebrateLiveGlobalRecord();
+}
+
+function maybeCelebrateLiveGlobalRecord() {
+  if (demoMode || globalRecordFanfarePlayed) return;
+  const mode = `${boardSize}x${boardSize}`;
+  const currentModeRecords = globalRecordsCache[mode] || [];
+  const currentTopScore = currentModeRecords.length ? Math.max(...currentModeRecords.map((record) => record.score)) : 0;
+  if (gameState.score > currentTopScore) {
+    globalRecordFanfarePlayed = true;
+    playGlobalRecordFanfare();
+    setStatus("Nuevo record global en juego.");
+  }
 }
 
 function render() {
@@ -715,12 +730,13 @@ function savePendingRecord() {
   };
   const currentModeRecords = globalRecordsCache[pendingGlobalRecord.mode] || [];
   const currentTopScore = currentModeRecords.length ? Math.max(...currentModeRecords.map((record) => record.score)) : 0;
+  const isGlobalTopScore = pendingGlobalRecord.score > currentTopScore;
   closeInitialsEntry();
   renderRecords();
-  setStatus("Record guardado.");
+  setStatus(isGlobalTopScore ? "Nuevo record global." : "Record guardado.");
   playApplause();
-  if (pendingGlobalRecord.score > currentTopScore) {
-    playGlobalRecordFanfare();
+  if (isGlobalTopScore && !globalRecordFanfarePlayed) {
+    window.setTimeout(() => playGlobalRecordFanfare(), 900);
   }
   submitGlobalRecord();
 }
@@ -1505,16 +1521,17 @@ function playApplause() {
 }
 
 function playGlobalRecordFanfare() {
-  const notes = [659.25, 783.99, 987.77, 1318.51, 1567.98];
+  const notes = [523.25, 659.25, 783.99, 1046.5, 1318.51, 1567.98];
   notes.forEach((note, index) => {
     playTone({
       frequency: note,
-      duration: 0.22,
-      type: index < 3 ? "triangle" : "square",
-      volume: 0.09,
-      when: index * 0.12,
+      duration: 0.24,
+      type: index < 4 ? "triangle" : "square",
+      volume: 0.12,
+      when: index * 0.14,
     });
   });
+  playTone({ frequency: 783.99, duration: 0.5, type: "sine", volume: 0.08, when: 0.92, slideTo: 1046.5 });
 }
 
 function queueMove(direction) {
