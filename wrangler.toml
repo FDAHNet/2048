@@ -1,0 +1,6 @@
+name = "angeloso-2048-records"
+main = "worker/index.js"
+compatibility_date = "2026-03-28"
+
+[observability]
+enabled = true

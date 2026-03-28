@@ -10,6 +10,7 @@
   <link rel="stylesheet" href="./styles.css">
 </head>
 <body>
+  <div id="ui-fx-layer" class="ui-fx-layer" aria-hidden="true"></div>
   <main class="app-shell">
     <section class="hero">
       <div>
@@ -49,6 +50,13 @@
 
     <section class="board-panel">
       <div class="board-layout">
+        <aside class="journal-panel" aria-labelledby="journal-title">
+          <div class="journal-header">
+            <h3 id="journal-title">Bitacora</h3>
+            <p>Logros de 128 o mas durante la partida.</p>
+          </div>
+          <div id="journal-list" class="journal-list"></div>
+        </aside>
         <div class="board-frame">
           <div id="board" class="board" aria-label="Tablero de 2048"></div>
           <div id="fx-layer" class="fx-layer" aria-hidden="true"></div>
@@ -57,9 +65,13 @@
           <div class="board-actions">
             <button id="finish-button" type="button">Ok, GANE.<br>Finaliza el juego</button>
           </div>
+          <div id="replay-indicator" class="replay-indicator hidden">REPLAY</div>
         </aside>
         </div>
       <div id="status" class="status" aria-live="polite"></div>
+      <div class="records-toggle-row">
+        <button id="toggle-records-button" type="button" class="secondary-button">Mostrar records</button>
+      </div>
       <section id="initials-entry" class="initials-entry hidden" aria-labelledby="initials-title">
         <div class="initials-card">
           <p class="initials-eyebrow">Nuevo record</p>
@@ -77,10 +89,23 @@
           <p class="initials-help">Usa arriba y abajo para cambiar la letra. Marca la letra como en una recreativa clasica.</p>
         </div>
       </section>
-      <section class="records-panel" aria-labelledby="records-title">
+      <section id="replay-viewer" class="replay-viewer hidden" aria-labelledby="replay-title">
+        <div class="replay-card">
+          <div class="replay-header">
+            <div>
+              <p class="initials-eyebrow">Replay</p>
+              <h3 id="replay-title">Ver partida</h3>
+            </div>
+            <button id="close-replay-button" type="button" class="secondary-button">Cerrar</button>
+          </div>
+          <div id="replay-meta" class="replay-meta"></div>
+          <pre id="replay-json" class="replay-json"></pre>
+        </div>
+      </section>
+      <section id="records-panel" class="records-panel records-panel-collapsed" aria-labelledby="records-title">
         <div class="records-header">
           <h2 id="records-title">Records</h2>
-          <p>Locales en tu navegador y globales mediante GitHub Issues.</p>
+          <p>Tu ranking local y la clasificacion global por modalidad.</p>
         </div>
         <div class="records-table">
           <h3 class="records-subtitle">Locales</h3>
@@ -89,21 +114,57 @@
             <span>Modo</span>
             <span>Puntos</span>
             <span>Fecha</span>
+            <span>Partida</span>
           </div>
           <div id="records-list" class="records-list"></div>
         </div>
         <div class="records-table global-records-table">
           <div class="global-records-headline">
             <h3 class="records-subtitle">Globales</h3>
-            <button id="submit-global-record-button" type="button" class="secondary-button hidden">Enviar record global</button>
+            <button id="submit-global-record-button" type="button" class="secondary-button hidden">Enviar records a la lista global</button>
           </div>
-          <div class="records-row records-row-head">
-            <span>Jugador</span>
-            <span>Modo</span>
-            <span>Puntos</span>
-            <span>Fecha</span>
+          <div class="global-records-groups">
+            <section class="records-mode-group">
+              <h4 class="records-mode-title">4x4</h4>
+              <div class="records-row records-row-head">
+                <span>Jugador</span>
+                <span>Puntos</span>
+                <span>Fecha</span>
+                <span>Partida</span>
+              </div>
+              <div id="global-records-list-4x4" class="records-list"></div>
+            </section>
+            <section class="records-mode-group">
+              <h4 class="records-mode-title">5x5</h4>
+              <div class="records-row records-row-head">
+                <span>Jugador</span>
+                <span>Puntos</span>
+                <span>Fecha</span>
+                <span>Partida</span>
+              </div>
+              <div id="global-records-list-5x5" class="records-list"></div>
+            </section>
+            <section class="records-mode-group">
+              <h4 class="records-mode-title">6x6</h4>
+              <div class="records-row records-row-head">
+                <span>Jugador</span>
+                <span>Puntos</span>
+                <span>Fecha</span>
+                <span>Partida</span>
+              </div>
+              <div id="global-records-list-6x6" class="records-list"></div>
+            </section>
+            <section class="records-mode-group">
+              <h4 class="records-mode-title">8x8</h4>
+              <div class="records-row records-row-head">
+                <span>Jugador</span>
+                <span>Puntos</span>
+                <span>Fecha</span>
+                <span>Partida</span>
+              </div>
+              <div id="global-records-list-8x8" class="records-list"></div>
+            </section>
           </div>
-          <div id="global-records-list" class="records-list"></div>
         </div>
       </section>
     </section>

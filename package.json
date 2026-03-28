@@ -1,6 +1,13 @@
 {
+  "scripts": {
+    "cf:dev": "wrangler dev",
+    "cf:deploy": "wrangler deploy"
+  },
   "dependencies": {
     "npm": "^11.12.1",
     "run": "^1.5.0"
+  },
+  "devDependencies": {
+    "wrangler": "^4.10.0"
   }
 }

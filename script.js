@@ -6,6 +6,7 @@ const PLAYER_INITIALS_KEY = "smooth-2048-player-initials";
 const GITHUB_OWNER = "FDAHNet";
 const GITHUB_REPO = "2048";
 const GLOBAL_RECORD_LABEL = "record";
+const WORKER_API_URL = "https://angeloso-2048-records.mcdrer.workers.dev";
 
 const boardElement = document.getElementById("board");
 const fxLayer = document.getElementById("fx-layer");
@@ -14,10 +15,18 @@ const bestScoreElement = document.getElementById("best-score");
 const statusElement = document.getElementById("status");
 const restartButton = document.getElementById("restart-button");
 const finishButton = document.getElementById("finish-button");
+const replayIndicatorElement = document.getElementById("replay-indicator");
 const boardSizeSelect = document.getElementById("board-size");
 const recordsListElement = document.getElementById("records-list");
-const globalRecordsListElement = document.getElementById("global-records-list");
 const submitGlobalRecordButton = document.getElementById("submit-global-record-button");
+const recordsPanelElement = document.getElementById("records-panel");
+const toggleRecordsButton = document.getElementById("toggle-records-button");
+const journalListElement = document.getElementById("journal-list");
+const uiFxLayerElement = document.getElementById("ui-fx-layer");
+const replayViewerElement = document.getElementById("replay-viewer");
+const replayMetaElement = document.getElementById("replay-meta");
+const replayJsonElement = document.getElementById("replay-json");
+const closeReplayButton = document.getElementById("close-replay-button");
 const initialsEntryElement = document.getElementById("initials-entry");
 const initialsSlotsElement = document.getElementById("initials-slots");
 const currentLetterElement = document.getElementById("current-letter");
@@ -33,9 +42,21 @@ let gameState = createEmptyState();
 let isAnimating = false;
 let touchStart = null;
 let audioContext = null;
+let audioMasterGain = null;
+let audioUnlocked = false;
 let recordSaved = false;
 let pendingGlobalRecord = null;
+let journalEntries = [];
+let currentReplay = null;
+let recordsPanelOpen = false;
+let replayMode = false;
+let replayTimer = null;
+let replayResumeState = null;
 const ARCADE_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+const GLOBAL_MODES = ["4x4", "5x5", "6x6", "8x8"];
+const globalRecordsElements = Object.fromEntries(
+  GLOBAL_MODES.map((mode) => [mode, document.getElementById(`global-records-list-${mode}`)])
+);
 const initialsEntryState = {
   active: false,
   letters: ["", "", ""],
@@ -71,6 +92,14 @@ function createTile(value, row, col) {
     isNew: true,
     justMerged: false,
     effectUntil: 0,
+  };
+}
+
+function cloneSpawnData(tile) {
+  return {
+    row: tile.row,
+    col: tile.col,
+    value: tile.value,
   };
 }
 
@@ -142,7 +171,9 @@ function addRandomTile() {
   if (!empty.length) return;
   const { row, col } = empty[Math.floor(Math.random() * empty.length)];
   const value = Math.random() < 0.9 ? 2 : 4;
-  gameState.cells[row][col] = createTile(value, row, col);
+  const tile = createTile(value, row, col);
+  gameState.cells[row][col] = tile;
+  return cloneSpawnData(tile);
 }
 
 function resetFlags() {
@@ -160,6 +191,7 @@ function startGame() {
     setStatus("Guarda o borra tus iniciales antes de empezar otra partida.");
     return;
   }
+  if (replayMode) stopReplayMode();
   maybePersistCurrentScore();
   boardSize = Number(boardSizeSelect.value);
   nextTileId = 0;
@@ -169,16 +201,33 @@ function startGame() {
   isAnimating = false;
   recordSaved = false;
   pendingGlobalRecord = null;
+  journalEntries = [];
+  currentReplay = null;
   submitGlobalRecordButton.classList.add("hidden");
   gameState = createEmptyState();
   buildGrid();
-  addRandomTile();
-  addRandomTile();
+  const startSpawnA = addRandomTile();
+  const startSpawnB = addRandomTile();
+  currentReplay = {
+    version: 1,
+    boardSize,
+    mode: `${boardSize}x${boardSize}`,
+    startedAt: new Date().toISOString(),
+    start: [startSpawnA, startSpawnB].filter(Boolean),
+    turns: [],
+  };
   render();
+  renderJournal();
   renderRecords();
   renderGlobalRecordsLoading();
   fetchGlobalRecords();
   setStatus("");
+}
+
+function setRecordsPanelOpen(nextOpen) {
+  recordsPanelOpen = nextOpen;
+  recordsPanelElement.classList.toggle("records-panel-collapsed", !recordsPanelOpen);
+  toggleRecordsButton.textContent = recordsPanelOpen ? "Ocultar records" : "Mostrar records";
 }
 
 function setStatus(message) {
@@ -228,6 +277,16 @@ function render() {
       tileMap.delete(id);
     }
   }
+}
+
+function cloneGameState(state) {
+  return {
+    score: state.score,
+    bestScore: state.bestScore,
+    over: state.over,
+    won: state.won,
+    cells: state.cells.map((row) => row.map((tile) => (tile ? { ...tile } : null))),
+  };
 }
 
 function loadRecords() {
@@ -281,56 +340,149 @@ function renderRecords() {
     const timestamp = document.createElement("span");
     timestamp.textContent = record.displayDate;
 
-    row.append(initials, mode, score, timestamp);
+    const action = document.createElement("button");
+    action.type = "button";
+    action.className = "secondary-button record-action-button";
+    action.textContent = "Ver partida";
+    action.addEventListener("click", () => openReplayViewer(record.replay, record));
+
+    row.append(initials, mode, score, timestamp, action);
     recordsListElement.appendChild(row);
   });
 }
 
-function renderGlobalRecordsLoading() {
-  globalRecordsListElement.innerHTML = "";
-  const row = document.createElement("div");
-  row.className = "records-row records-row-empty";
-  row.textContent = "Cargando records globales...";
-  globalRecordsListElement.appendChild(row);
-}
+function renderJournal() {
+  journalListElement.innerHTML = "";
 
-function renderGlobalRecordsError() {
-  globalRecordsListElement.innerHTML = "";
-  const row = document.createElement("div");
-  row.className = "records-row records-row-empty";
-  row.textContent = "No se pudieron cargar los records globales de GitHub.";
-  globalRecordsListElement.appendChild(row);
-}
-
-function renderGlobalRecords(records) {
-  globalRecordsListElement.innerHTML = "";
-
-  if (!records.length) {
-    const row = document.createElement("div");
-    row.className = "records-row records-row-empty";
-    row.textContent = "Todavia no hay records globales enviados.";
-    globalRecordsListElement.appendChild(row);
+  if (!journalEntries.length) {
+    const empty = document.createElement("div");
+    empty.className = "journal-entry journal-entry-empty";
+    empty.textContent = "Todavia no hay logros apuntados.";
+    journalListElement.appendChild(empty);
     return;
   }
 
-  records.forEach((record) => {
+  journalEntries.forEach((entry) => {
+    const item = document.createElement("div");
+    item.className = "journal-entry";
+    item.dataset.entryId = entry.id;
+
+    const time = document.createElement("time");
+    time.textContent = entry.timeText;
+
+    const text = document.createElement("strong");
+    text.textContent = `Bloque ${entry.value} creado`;
+
+    item.append(time, text);
+    journalListElement.appendChild(item);
+  });
+}
+
+function addJournalEntry(value, row, col) {
+  const now = new Date();
+  const entry = {
+    id: `entry-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    value,
+    row,
+    col,
+    timeText: now.toLocaleTimeString("es-ES", {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    }),
+  };
+
+  journalEntries.unshift(entry);
+  renderJournal();
+  journalListElement.scrollTop = 0;
+  animateJournalFlight(entry);
+}
+
+function animateJournalFlight(entry) {
+  const targetEntry = journalListElement.querySelector(`[data-entry-id="${entry.id}"]`);
+  const sourceTileData = gameState.cells[entry.row]?.[entry.col];
+  const sourceTile = sourceTileData ? tileMap.get(sourceTileData.id) : null;
+  if (!targetEntry || !sourceTile) return;
+
+  const sourceRect = sourceTile.getBoundingClientRect();
+  const targetRect = targetEntry.getBoundingClientRect();
+  const sourceX = sourceRect.left + sourceRect.width / 2;
+  const sourceY = sourceRect.top + sourceRect.height / 2;
+  const targetX = targetRect.left + targetRect.width / 2;
+  const targetY = targetRect.top + targetRect.height / 2;
+
+  const flight = document.createElement("div");
+  flight.className = "journal-flight";
+  flight.textContent = entry.value;
+  flight.style.left = `${sourceX}px`;
+  flight.style.top = `${sourceY}px`;
+  flight.style.setProperty("--tx", `${targetX - sourceX}px`);
+  flight.style.setProperty("--ty", `${targetY - sourceY}px`);
+  uiFxLayerElement.appendChild(flight);
+
+  targetEntry.classList.add("journal-entry-flash");
+  targetEntry.addEventListener("animationend", () => targetEntry.classList.remove("journal-entry-flash"), { once: true });
+  flight.addEventListener("animationend", () => flight.remove(), { once: true });
+}
+
+function renderGlobalRecordsLoading() {
+  GLOBAL_MODES.forEach((mode) => {
+    const listElement = globalRecordsElements[mode];
+    listElement.innerHTML = "";
     const row = document.createElement("div");
-    row.className = "records-row";
+    row.className = "records-row records-row-empty";
+    row.textContent = "Cargando...";
+    listElement.appendChild(row);
+  });
+}
 
-    const initials = document.createElement("span");
-    initials.textContent = record.initials;
+function renderGlobalRecordsError() {
+  GLOBAL_MODES.forEach((mode) => {
+    const listElement = globalRecordsElements[mode];
+    listElement.innerHTML = "";
+    const row = document.createElement("div");
+    row.className = "records-row records-row-empty";
+    row.textContent = "No se pudieron cargar.";
+    listElement.appendChild(row);
+  });
+}
 
-    const mode = document.createElement("span");
-    mode.textContent = record.mode;
+function renderGlobalRecords(recordsByMode) {
+  GLOBAL_MODES.forEach((mode) => {
+    const listElement = globalRecordsElements[mode];
+    const records = recordsByMode[mode] || [];
+    listElement.innerHTML = "";
 
-    const score = document.createElement("span");
-    score.textContent = String(record.score);
+    if (!records.length) {
+      const row = document.createElement("div");
+      row.className = "records-row records-row-empty";
+      row.textContent = "Sin records enviados.";
+      listElement.appendChild(row);
+      return;
+    }
 
-    const timestamp = document.createElement("span");
-    timestamp.textContent = record.displayDate;
+    records.forEach((record) => {
+      const row = document.createElement("div");
+      row.className = "records-row";
 
-    row.append(initials, mode, score, timestamp);
-    globalRecordsListElement.appendChild(row);
+      const initials = document.createElement("span");
+      initials.textContent = record.initials;
+
+      const score = document.createElement("span");
+      score.textContent = String(record.score);
+
+      const timestamp = document.createElement("span");
+      timestamp.textContent = record.displayDate;
+
+      const action = document.createElement("button");
+      action.type = "button";
+      action.className = "secondary-button record-action-button";
+      action.textContent = "Ver partida";
+      action.addEventListener("click", () => openReplayViewer(record.replay, record));
+
+      row.append(initials, score, timestamp, action);
+      listElement.appendChild(row);
+    });
   });
 }
 
@@ -339,9 +491,19 @@ function parseGlobalRecord(issue) {
   const initials = body.match(/Initials:\s*([A-Z]{3})/i)?.[1]?.toUpperCase();
   const mode = body.match(/Mode:\s*([0-9]+x[0-9]+)/i)?.[1];
   const scoreText = body.match(/Score:\s*([0-9]+)/i)?.[1];
+  const replayMatch = body.match(/```json\s*([\s\S]*?)```/i);
   const score = Number(scoreText);
 
   if (!initials || !mode || !Number.isFinite(score)) return null;
+
+  let replay = null;
+  if (replayMatch?.[1]) {
+    try {
+      replay = JSON.parse(replayMatch[1]);
+    } catch {
+      replay = null;
+    }
+  }
 
   return {
     initials,
@@ -352,6 +514,7 @@ function parseGlobalRecord(issue) {
       dateStyle: "short",
       timeStyle: "short",
     }).format(new Date(issue.created_at)),
+    replay,
   };
 }
 
@@ -363,13 +526,23 @@ async function fetchGlobalRecords() {
     const records = issues
       .filter((issue) => !issue.pull_request)
       .map(parseGlobalRecord)
-      .filter(Boolean)
-      .sort((left, right) => {
+      .filter(Boolean);
+    const grouped = Object.fromEntries(GLOBAL_MODES.map((mode) => [mode, []]));
+
+    records.forEach((record) => {
+      if (!grouped[record.mode]) return;
+      grouped[record.mode].push(record);
+    });
+
+    GLOBAL_MODES.forEach((mode) => {
+      grouped[mode].sort((left, right) => {
         if (right.score !== left.score) return right.score - left.score;
         return left.isoDate.localeCompare(right.isoDate);
-      })
-      .slice(0, 10);
-    renderGlobalRecords(records);
+      });
+      grouped[mode] = grouped[mode].slice(0, 10);
+    });
+
+    renderGlobalRecords(grouped);
   } catch {
     renderGlobalRecordsError();
   }
@@ -458,6 +631,14 @@ function savePendingRecord() {
     mode: `${boardSize}x${boardSize}`,
     score: initialsEntryState.pendingScore,
     isoDate: now.toISOString(),
+    replay: currentReplay
+      ? {
+          ...currentReplay,
+          finishedAt: now.toISOString(),
+          finalScore: initialsEntryState.pendingScore,
+          initials,
+        }
+      : null,
   };
   submitGlobalRecordButton.classList.remove("hidden");
   closeInitialsEntry();
@@ -468,6 +649,7 @@ function savePendingRecord() {
 function buildGlobalRecordIssueUrl() {
   if (!pendingGlobalRecord) return "";
   const title = `[Record] ${pendingGlobalRecord.initials} - ${pendingGlobalRecord.score} - ${pendingGlobalRecord.mode}`;
+  const replayJson = pendingGlobalRecord.replay ? JSON.stringify(pendingGlobalRecord.replay, null, 2) : "{}";
   const body = [
     "New global score submission",
     "",
@@ -475,6 +657,11 @@ function buildGlobalRecordIssueUrl() {
     `Mode: ${pendingGlobalRecord.mode}`,
     `Score: ${pendingGlobalRecord.score}`,
     `Date: ${pendingGlobalRecord.isoDate}`,
+    "",
+    "Replay JSON:",
+    "```json",
+    replayJson,
+    "```",
   ].join("\n");
 
   return `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/issues/new?labels=${encodeURIComponent(GLOBAL_RECORD_LABEL)}&title=${encodeURIComponent(title)}&body=${encodeURIComponent(body)}`;
@@ -482,7 +669,198 @@ function buildGlobalRecordIssueUrl() {
 
 function submitGlobalRecord() {
   if (!pendingGlobalRecord) return;
-  window.open(buildGlobalRecordIssueUrl(), "_blank", "noopener");
+  if (!WORKER_API_URL) {
+    setStatus("Falta configurar la URL del worker de Cloudflare.");
+    return;
+  }
+
+  submitGlobalRecordButton.disabled = true;
+  setStatus("Enviando record global...");
+
+  fetch(WORKER_API_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(pendingGlobalRecord),
+  })
+    .then(async (response) => {
+      if (!response.ok) {
+        const errorPayload = await response.json().catch(() => ({}));
+        throw new Error(errorPayload.error || "No se pudo enviar el record");
+      }
+      return response.json();
+    })
+    .then(() => {
+      submitGlobalRecordButton.classList.add("hidden");
+      setStatus("Record global enviado correctamente.");
+      fetchGlobalRecords();
+    })
+    .catch((error) => {
+      setStatus(`Error al enviar record: ${error.message}`);
+    })
+    .finally(() => {
+      submitGlobalRecordButton.disabled = false;
+    });
+}
+
+function openReplayViewer(replay, record) {
+  replayViewerElement.classList.remove("hidden");
+  replayMetaElement.textContent = `${record.initials} | ${record.mode} | ${record.score} puntos | ${record.displayDate}`;
+  if (!replay) {
+    replayJsonElement.textContent = "Esta partida no tiene replay disponible. Fue guardada antes de activar el sistema de reproduccion.";
+    setStatus("Replay no disponible para este record.");
+    return;
+  }
+
+  replayJsonElement.textContent = JSON.stringify(replay, null, 2);
+  startReplayOnBoard(replay);
+}
+
+function closeReplayViewer() {
+  replayViewerElement.classList.add("hidden");
+  replayMetaElement.textContent = "";
+  replayJsonElement.textContent = "";
+  stopReplayMode();
+}
+
+function setReplayVisualState(active) {
+  const boardFrame = document.querySelector(".board-frame");
+  boardFrame.classList.toggle("is-replay", active);
+  replayIndicatorElement.classList.toggle("hidden", !active);
+}
+
+function triggerReplayWipe() {
+  const boardFrame = document.querySelector(".board-frame");
+  boardFrame.classList.remove("replay-wipe");
+  void boardFrame.offsetWidth;
+  boardFrame.classList.add("replay-wipe");
+}
+
+function stopReplayMode() {
+  replayMode = false;
+  if (replayTimer) {
+    window.clearTimeout(replayTimer);
+    replayTimer = null;
+  }
+  setReplayVisualState(false);
+  if (!replayResumeState) return;
+
+  boardSize = replayResumeState.boardSize;
+  boardSizeSelect.value = String(boardSize);
+  gameState = cloneGameState(replayResumeState.gameState);
+  nextTileId = replayResumeState.nextTileId;
+  render();
+  setStatus(replayResumeState.statusText);
+  replayResumeState = null;
+}
+
+function insertReplaySpawn(spawn) {
+  const tile = createTile(spawn.value, spawn.row, spawn.col);
+  tile.isNew = true;
+  gameState.cells[spawn.row][spawn.col] = tile;
+}
+
+function replayMove(direction, spawn) {
+  const vectors = {
+    up: [-1, 0],
+    down: [1, 0],
+    left: [0, -1],
+    right: [0, 1],
+  };
+  const [dr, dc] = vectors[direction];
+  const traversed = getTraversal(direction);
+  const mergedTargets = new Set();
+
+  resetFlags();
+
+  for (const major of traversed) {
+    for (const minor of traversed) {
+      const row = direction === "left" || direction === "right" ? major : minor;
+      const col = direction === "left" || direction === "right" ? minor : major;
+      const tile = gameState.cells[row][col];
+      if (!tile) continue;
+
+      let currentRow = row;
+      let currentCol = col;
+      let nextRow = currentRow + dr;
+      let nextCol = currentCol + dc;
+
+      while (withinBounds(nextRow, nextCol) && !gameState.cells[nextRow][nextCol]) {
+        currentRow = nextRow;
+        currentCol = nextCol;
+        nextRow += dr;
+        nextCol += dc;
+      }
+
+      const target = withinBounds(nextRow, nextCol) ? gameState.cells[nextRow][nextCol] : null;
+      const targetKey = `${nextRow}-${nextCol}`;
+
+      gameState.cells[row][col] = null;
+
+      if (target && target.value === tile.value && !mergedTargets.has(targetKey)) {
+        target.value = tile.value * 2;
+        target.justMerged = true;
+        mergedTargets.add(targetKey);
+      } else {
+        tile.row = currentRow;
+        tile.col = currentCol;
+        gameState.cells[currentRow][currentCol] = tile;
+      }
+    }
+  }
+
+  gameState.cells = normalizeCells();
+  if (spawn) insertReplaySpawn(spawn);
+  render();
+}
+
+function playReplaySequence(replay, index = 0) {
+  if (!replayMode) return;
+  if (index >= replay.turns.length) {
+    setStatus("Replay finalizada.");
+    return;
+  }
+
+  const turn = replay.turns[index];
+  replayMove(turn.move, turn.spawn);
+  replayTimer = window.setTimeout(() => playReplaySequence(replay, index + 1), 520);
+}
+
+function startReplayOnBoard(replay) {
+  stopReplayMode();
+  replayMode = true;
+  replayResumeState = {
+    boardSize,
+    gameState: cloneGameState(gameState),
+    nextTileId,
+    statusText: statusElement.textContent,
+  };
+
+  boardSize = replay.boardSize;
+  boardSizeSelect.value = String(boardSize);
+  nextTileId = 0;
+  gameState = createEmptyState();
+  gameState.score = 0;
+  gameState.over = true;
+  gameState.cells = Array.from({ length: boardSize }, () => Array(boardSize).fill(null));
+  buildGrid();
+  render();
+  triggerReplayWipe();
+  setReplayVisualState(true);
+  setStatus(`Replay ${replay.mode} en reproduccion.`);
+
+  window.setTimeout(() => {
+    if (!replayMode) return;
+    gameState = createEmptyState();
+    gameState.score = 0;
+    gameState.over = true;
+    gameState.cells = Array.from({ length: boardSize }, () => Array(boardSize).fill(null));
+    nextTileId = 0;
+    replay.start.forEach((spawn) => insertReplaySpawn(spawn));
+    render();
+    playReplaySequence(replay, 0);
+  }, 240);
 }
 
 function commitCurrentLetter() {
@@ -563,7 +941,7 @@ function scheduleEpicEffect(tile) {
 }
 
 function move(direction) {
-  if (gameState.over || isAnimating || initialsEntryState.active) return;
+  if (gameState.over || isAnimating || initialsEntryState.active || replayMode) return;
 
   resetFlags();
   isAnimating = true;
@@ -656,10 +1034,20 @@ function move(direction) {
   }
 
   window.setTimeout(() => {
-    addRandomTile();
+    const spawnedTile = addRandomTile();
+    if (currentReplay && spawnedTile) {
+      currentReplay.turns.push({
+        move: direction,
+        spawn: spawnedTile,
+        atMs: Date.now() - Date.parse(currentReplay.startedAt),
+      });
+    }
     render();
 
     epicBursts.forEach((entry) => createEpicBurst(entry.row, entry.col, entry.value));
+    epicBursts
+      .filter((entry) => entry.value > 64)
+      .forEach((entry) => addJournalEntry(entry.value, entry.row, entry.col));
 
     if (!gameState.won && hasTileAtLeast(2048)) {
       gameState.won = true;
@@ -743,14 +1131,42 @@ function ensureAudio() {
     const AudioCtor = window.AudioContext || window.webkitAudioContext;
     if (!AudioCtor) return null;
     audioContext = new AudioCtor();
+    audioMasterGain = audioContext.createGain();
+    audioMasterGain.gain.value = 0.9;
+    audioMasterGain.connect(audioContext.destination);
   }
-  if (audioContext.state === "suspended") audioContext.resume();
   return audioContext;
+}
+
+async function unlockAudio() {
+  const context = ensureAudio();
+  if (!context) return null;
+
+  if (context.state !== "running") {
+    try {
+      await context.resume();
+    } catch {
+      return null;
+    }
+  }
+
+  if (!audioUnlocked) {
+    const oscillator = context.createOscillator();
+    const gain = context.createGain();
+    gain.gain.value = 0.0001;
+    oscillator.connect(gain);
+    gain.connect(audioMasterGain);
+    oscillator.start();
+    oscillator.stop(context.currentTime + 0.01);
+    audioUnlocked = true;
+  }
+
+  return context;
 }
 
 function playTone({ frequency, duration, type = "sine", volume = 0.05, when = 0, slideTo = null }) {
   const context = ensureAudio();
-  if (!context) return;
+  if (!context || context.state !== "running" || !audioMasterGain) return;
 
   const startAt = context.currentTime + when;
   const oscillator = context.createOscillator();
@@ -765,7 +1181,7 @@ function playTone({ frequency, duration, type = "sine", volume = 0.05, when = 0,
   gain.gain.exponentialRampToValueAtTime(0.0001, startAt + duration);
 
   oscillator.connect(gain);
-  gain.connect(context.destination);
+  gain.connect(audioMasterGain);
   oscillator.start(startAt);
   oscillator.stop(startAt + duration + 0.02);
 }
@@ -801,7 +1217,7 @@ function playFanfare128() {
 }
 
 function handleKeydown(event) {
-  ensureAudio();
+  void unlockAudio();
   if (initialsEntryState.active) {
     if (event.key === "ArrowUp" || event.key === "w" || event.key === "W") {
       event.preventDefault();
@@ -845,7 +1261,7 @@ function handleKeydown(event) {
 }
 
 function handleTouchStart(event) {
-  ensureAudio();
+  void unlockAudio();
   const touch = event.changedTouches[0];
   touchStart = { x: touch.clientX, y: touch.clientY };
 }
@@ -865,26 +1281,34 @@ function handleTouchEnd(event) {
   }
 }
 
-window.addEventListener("pointerdown", ensureAudio);
+window.addEventListener("pointerdown", () => { void unlockAudio(); });
 restartButton.addEventListener("click", () => {
-  ensureAudio();
+  void unlockAudio();
   startGame();
 });
-boardSizeSelect.addEventListener("click", ensureAudio);
+boardSizeSelect.addEventListener("click", () => { void unlockAudio(); });
 boardSizeSelect.addEventListener("change", () => {
-  ensureAudio();
+  void unlockAudio();
   startGame();
 });
 finishButton.addEventListener("click", finishGame);
+letterUpButton.addEventListener("pointerdown", () => { void unlockAudio(); });
+letterDownButton.addEventListener("pointerdown", () => { void unlockAudio(); });
+selectLetterButton.addEventListener("pointerdown", () => { void unlockAudio(); });
+deleteLetterButton.addEventListener("pointerdown", () => { void unlockAudio(); });
+submitGlobalRecordButton.addEventListener("pointerdown", () => { void unlockAudio(); });
 letterUpButton.addEventListener("click", () => shiftCurrentLetter(-1));
 letterDownButton.addEventListener("click", () => shiftCurrentLetter(1));
 selectLetterButton.addEventListener("click", commitCurrentLetter);
 deleteLetterButton.addEventListener("click", deleteLastLetter);
 submitGlobalRecordButton.addEventListener("click", submitGlobalRecord);
+closeReplayButton.addEventListener("click", closeReplayViewer);
+toggleRecordsButton.addEventListener("click", () => setRecordsPanelOpen(!recordsPanelOpen));
 window.addEventListener("keydown", handleKeydown);
 boardElement.addEventListener("touchstart", handleTouchStart, { passive: true });
 boardElement.addEventListener("touchend", handleTouchEnd, { passive: true });
 window.addEventListener("resize", render);
 
 buildGrid();
+setRecordsPanelOpen(false);
 startGame();
