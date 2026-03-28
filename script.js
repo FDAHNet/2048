@@ -236,6 +236,7 @@ function resetFlags() {
 
 function startGame(options = {}) {
   const { demo = false } = options;
+  const wasDemoMode = demoMode;
   if (initialsEntryState.active) {
     closeInitialsEntry({ discard: true });
   }
@@ -243,7 +244,9 @@ function startGame(options = {}) {
   discardReplayState();
   stopDemoMode();
   demoMode = demo;
-  maybePersistCurrentScore();
+  if (!wasDemoMode) {
+    maybePersistCurrentScore();
+  }
   boardSize = Number(boardSizeSelect.value);
   nextTileId = 0;
   tileMap.forEach((element) => element.remove());
