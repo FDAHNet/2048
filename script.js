@@ -29,8 +29,6 @@ const uiFxLayerElement = document.getElementById("ui-fx-layer");
 const attractOverlayElement = document.getElementById("attract-overlay");
 const startAttractButton = document.getElementById("start-attract-button");
 const themeSelect = document.getElementById("theme-select");
-const cabinetScoreElement = document.getElementById("cabinet-score");
-const cabinetBestElement = document.getElementById("cabinet-best");
 const replayViewerElement = document.getElementById("replay-viewer");
 const replayMetaElement = document.getElementById("replay-meta");
 const replayEmptyElement = document.getElementById("replay-empty");
@@ -120,10 +118,6 @@ function applyTheme(nextTheme) {
   document.body.dataset.theme = theme;
   themeSelect.value = theme;
   localStorage.setItem(THEME_KEY, theme);
-}
-
-function formatCabinetNumber(value) {
-  return String(Math.max(0, value)).padStart(6, "0");
 }
 
 function getBestScoreKey() {
@@ -304,9 +298,6 @@ function render() {
   syncBoardMetrics();
   scoreElement.textContent = gameState.score;
   bestScoreElement.textContent = gameState.bestScore;
-  cabinetScoreElement.textContent = formatCabinetNumber(gameState.score);
-  cabinetBestElement.textContent = formatCabinetNumber(gameState.bestScore);
-
   const now = performance.now();
   const activeIds = new Set();
 
