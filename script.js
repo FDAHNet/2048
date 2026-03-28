@@ -17,6 +17,7 @@ const bestScoreElement = document.getElementById("best-score");
 const statusElement = document.getElementById("status");
 const restartButton = document.getElementById("restart-button");
 const finishButton = document.getElementById("finish-button");
+const gameOverOverlayElement = document.getElementById("game-over-overlay");
 const audioToggleButton = document.getElementById("audio-toggle-button");
 const replayIndicatorElement = document.getElementById("replay-indicator");
 const boardSizeSelect = document.getElementById("board-size");
@@ -103,6 +104,10 @@ function updateAudioToggleButton() {
   audioToggleButton.textContent = audioEnabled ? "🔊 SONIDO ON" : "🔈 SONIDO OFF";
   audioToggleButton.classList.toggle("is-on", audioEnabled);
   audioToggleButton.setAttribute("aria-pressed", String(audioEnabled));
+}
+
+function setGameOverOverlay(visible) {
+  gameOverOverlayElement.classList.toggle("hidden", !visible);
 }
 
 function stopDemoMode() {
@@ -243,6 +248,7 @@ function startGame(options = {}) {
   gameSessionId += 1;
   discardReplayState();
   stopDemoMode();
+  setGameOverOverlay(false);
   demoMode = demo;
   if (!wasDemoMode) {
     maybePersistCurrentScore();
@@ -836,6 +842,7 @@ function closeReplayViewer() {
   replayEmptyElement.classList.add("hidden");
   replayControlsElement.classList.add("hidden");
   replayProgressElement.textContent = "";
+  setGameOverOverlay(false);
   stopReplayMode();
 }
 
@@ -1048,6 +1055,7 @@ function toggleReplayPlayback() {
 
 function startReplayOnBoard(replay) {
   stopReplayMode();
+  setGameOverOverlay(false);
   replayMode = true;
   replayResumeState = {
     boardSize,
@@ -1152,6 +1160,7 @@ function finishGame() {
   if (demoMode) return;
   if (gameState.over || isAnimating || initialsEntryState.active) return;
   gameState.over = true;
+  setGameOverOverlay(true);
   maybePersistCurrentScore();
   if (!initialsEntryState.active) setStatus("Partida finalizada.");
 }
@@ -1337,6 +1346,7 @@ function move(direction) {
     } else if (!canMove()) {
       gameState.over = true;
       if (!demoMode) {
+        setGameOverOverlay(true);
         maybePersistCurrentScore();
         setStatus("No quedan movimientos. Pulsa Nueva partida.");
       } else {
