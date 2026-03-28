@@ -764,10 +764,6 @@ async function fetchGlobalRecords() {
       `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/issues?state=all&labels=${GLOBAL_RECORD_LABEL}&per_page=100&_=${cacheBuster}`,
       {
         cache: "no-store",
-        headers: {
-          "Cache-Control": "no-cache, no-store, max-age=0",
-          Pragma: "no-cache",
-        },
       }
     );
     if (!response.ok) throw new Error(`GitHub ${response.status}`);
