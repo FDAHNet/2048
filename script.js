@@ -4,6 +4,7 @@ const STORAGE_PREFIX = "smooth-2048-best-score";
 const RECORDS_PREFIX = "smooth-2048-records";
 const PLAYER_INITIALS_KEY = "smooth-2048-player-initials";
 const AUDIO_ENABLED_KEY = "smooth-2048-audio-enabled";
+const THEME_KEY = "smooth-2048-theme";
 const GITHUB_OWNER = "FDAHNet";
 const GITHUB_REPO = "2048";
 const GLOBAL_RECORD_LABEL = "record";
@@ -25,11 +26,17 @@ const recordsPanelElement = document.getElementById("records-panel");
 const toggleRecordsButton = document.getElementById("toggle-records-button");
 const journalListElement = document.getElementById("journal-list");
 const uiFxLayerElement = document.getElementById("ui-fx-layer");
+const attractOverlayElement = document.getElementById("attract-overlay");
+const startAttractButton = document.getElementById("start-attract-button");
+const themeSelect = document.getElementById("theme-select");
+const cabinetScoreElement = document.getElementById("cabinet-score");
+const cabinetBestElement = document.getElementById("cabinet-best");
 const replayViewerElement = document.getElementById("replay-viewer");
 const replayMetaElement = document.getElementById("replay-meta");
 const replayEmptyElement = document.getElementById("replay-empty");
 const replayControlsElement = document.getElementById("replay-controls");
 const replayProgressElement = document.getElementById("replay-progress");
+const replayModeLabelElement = document.getElementById("replay-mode-label");
 const closeReplayButton = document.getElementById("close-replay-button");
 const replayFirstButton = document.getElementById("replay-first-button");
 const replayPrevButton = document.getElementById("replay-prev-button");
@@ -63,6 +70,10 @@ let replayMode = false;
 let replayTimer = null;
 let replayResumeState = null;
 let replaySession = null;
+let demoMode = false;
+let demoTimer = null;
+let attractDismissed = false;
+let theme = localStorage.getItem(THEME_KEY) || "crt";
 const ARCADE_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 const GLOBAL_MODES = ["4x4", "5x5", "6x6", "8x8"];
 const globalRecordsElements = Object.fromEntries(
@@ -90,6 +101,17 @@ function updateAudioToggleButton() {
   audioToggleButton.textContent = audioEnabled ? "🔊 SONIDO ON" : "🔈 SONIDO OFF";
   audioToggleButton.classList.toggle("is-on", audioEnabled);
   audioToggleButton.setAttribute("aria-pressed", String(audioEnabled));
+}
+
+function applyTheme(nextTheme) {
+  theme = nextTheme;
+  document.body.dataset.theme = theme;
+  themeSelect.value = theme;
+  localStorage.setItem(THEME_KEY, theme);
+}
+
+function formatCabinetNumber(value) {
+  return String(Math.max(0, value)).padStart(6, "0");
 }
 
 function getBestScoreKey() {
@@ -203,12 +225,14 @@ function resetFlags() {
   }
 }
 
-function startGame() {
+function startGame(options = {}) {
+  const { demo = false } = options;
   if (initialsEntryState.active) {
     setStatus("Guarda o borra tus iniciales antes de empezar otra partida.");
     return;
   }
   discardReplayState();
+  demoMode = demo;
   maybePersistCurrentScore();
   boardSize = Number(boardSizeSelect.value);
   nextTileId = 0;
@@ -225,20 +249,25 @@ function startGame() {
   buildGrid();
   const startSpawnA = addRandomTile();
   const startSpawnB = addRandomTile();
-  currentReplay = {
-    version: 1,
-    boardSize,
-    mode: `${boardSize}x${boardSize}`,
-    startedAt: new Date().toISOString(),
-    start: [startSpawnA, startSpawnB].filter(Boolean),
-    turns: [],
-  };
+  if (!demoMode) {
+    currentReplay = {
+      version: 1,
+      boardSize,
+      mode: `${boardSize}x${boardSize}`,
+      startedAt: new Date().toISOString(),
+      start: [startSpawnA, startSpawnB].filter(Boolean),
+      turns: [],
+    };
+  }
   render();
   renderJournal();
   renderRecords();
-  renderGlobalRecordsLoading();
-  fetchGlobalRecords();
-  setStatus("");
+  if (!demoMode) {
+    renderGlobalRecordsLoading();
+    fetchGlobalRecords();
+  }
+  setStatus(demoMode ? "MODO DEMO" : "");
+  if (demoMode) scheduleDemoMove();
 }
 
 function setRecordsPanelOpen(nextOpen) {
@@ -261,6 +290,8 @@ function render() {
   syncBoardMetrics();
   scoreElement.textContent = gameState.score;
   bestScoreElement.textContent = gameState.bestScore;
+  cabinetScoreElement.textContent = formatCabinetNumber(gameState.score);
+  cabinetBestElement.textContent = formatCabinetNumber(gameState.bestScore);
 
   const now = performance.now();
   const activeIds = new Set();
@@ -777,6 +808,7 @@ function discardReplayState() {
   replayEmptyElement.classList.add("hidden");
   replayControlsElement.classList.add("hidden");
   replayProgressElement.textContent = "";
+  replayModeLabelElement.textContent = "STOP";
   const boardFrame = document.querySelector(".board-frame");
   boardFrame.classList.remove("is-replay", "replay-wipe");
   replayIndicatorElement.classList.add("hidden");
@@ -818,12 +850,14 @@ function updateReplayControls() {
   if (!replaySession) {
     replayProgressElement.textContent = "";
     replayPlayButton.textContent = "Play";
+    replayModeLabelElement.textContent = "STOP";
     return;
   }
 
   const totalTurns = replaySession.replay.turns.length;
   replayProgressElement.textContent = `Paso ${replaySession.index} de ${totalTurns}`;
   replayPlayButton.textContent = replaySession.playing ? "Pausa" : "Play";
+  replayModeLabelElement.textContent = replaySession.playing ? "PLAY" : (replaySession.index >= totalTurns ? "END" : "PAUSE");
   replayFirstButton.disabled = replaySession.index === 0;
   replayPrevButton.disabled = replaySession.index === 0;
   replayNextButton.disabled = replaySession.index >= totalTurns;
@@ -1002,6 +1036,35 @@ function startReplayOnBoard(replay) {
   }, 240);
 }
 
+function scheduleDemoMove() {
+  if (!demoMode) return;
+  if (demoTimer) window.clearTimeout(demoTimer);
+  demoTimer = window.setTimeout(() => {
+    if (!demoMode || isAnimating || replayMode || initialsEntryState.active) return;
+    const directions = ["up", "right", "down", "left"];
+    const direction = directions[Math.floor(Math.random() * directions.length)];
+    move(direction);
+  }, 520);
+}
+
+function startAttractMode() {
+  attractDismissed = false;
+  attractOverlayElement.classList.remove("hidden");
+  startGame({ demo: true });
+}
+
+function startActualGame() {
+  if (attractDismissed) return;
+  attractDismissed = true;
+  demoMode = false;
+  if (demoTimer) {
+    window.clearTimeout(demoTimer);
+    demoTimer = null;
+  }
+  attractOverlayElement.classList.add("hidden");
+  startGame();
+}
+
 function commitCurrentLetter() {
   if (!initialsEntryState.active) return;
   initialsEntryState.letters[initialsEntryState.slot] = getCurrentSelectedLetter();
@@ -1028,6 +1091,7 @@ function deleteLastLetter() {
 }
 
 function maybePersistCurrentScore() {
+  if (demoMode) return;
   if (recordSaved || gameState.score <= 0) return;
   if (!isRecordScore(gameState.score)) {
     recordSaved = true;
@@ -1038,6 +1102,7 @@ function maybePersistCurrentScore() {
 }
 
 function finishGame() {
+  if (demoMode) return;
   if (gameState.over || isAnimating || initialsEntryState.active) return;
   gameState.over = true;
   maybePersistCurrentScore();
@@ -1081,7 +1146,10 @@ function scheduleEpicEffect(tile) {
 
 function move(direction) {
   void unlockAudio();
-  if (gameState.over || isAnimating || initialsEntryState.active || replayMode) return;
+  if (gameState.over || isAnimating || initialsEntryState.active || replayMode) {
+    if (demoMode && gameState.over) scheduleDemoMove();
+    return;
+  }
 
   resetFlags();
   isAnimating = true;
@@ -1159,17 +1227,18 @@ function move(direction) {
   if (!moved) {
     gameState.cells = normalizeCells();
     render();
-    playBlockedSound();
+    if (!demoMode) playBlockedSound();
     isAnimating = false;
+    if (demoMode) scheduleDemoMove();
     return;
   }
 
   render();
   mergeGhosts.forEach((ghost) => createMergeGhost(ghost));
-  if (hadMerge) {
+  if (hadMerge && !demoMode) {
     playMergeSound(highestMerge);
     if (highestMerge >= 128) playFanfare128();
-  } else {
+  } else if (!demoMode) {
     playMoveSound();
   }
 
@@ -1191,15 +1260,22 @@ function move(direction) {
 
     if (!gameState.won && hasTileAtLeast(2048)) {
       gameState.won = true;
-      setStatus("Llegaste a 2048. Puedes seguir jugando.");
+      setStatus(demoMode ? "MODO DEMO" : "Llegaste a 2048. Puedes seguir jugando.");
     } else if (!canMove()) {
       gameState.over = true;
-      maybePersistCurrentScore();
-      setStatus("No quedan movimientos. Pulsa Nueva partida.");
+      if (!demoMode) {
+        maybePersistCurrentScore();
+        setStatus("No quedan movimientos. Pulsa Nueva partida.");
+      } else {
+        setStatus("MODO DEMO");
+        startGame({ demo: true });
+        return;
+      }
     } else {
-      setStatus("");
+      setStatus(demoMode ? "MODO DEMO" : "");
     }
     isAnimating = false;
+    if (demoMode) scheduleDemoMove();
   }, MOVE_DURATION);
 }
 
@@ -1395,6 +1471,11 @@ function toggleAudioEnabled() {
 }
 
 function handleKeydown(event) {
+  if (!attractDismissed && (event.key === " " || event.key === "Enter" || event.key === "Escape")) {
+    event.preventDefault();
+    startActualGame();
+    return;
+  }
   void unlockAudio();
   if (replayMode && replaySession) {
     if (event.key === " " || event.key === "Enter") {
@@ -1466,11 +1547,17 @@ function handleKeydown(event) {
   };
   const direction = keyMap[event.key];
   if (!direction) return;
+  if (!attractDismissed) {
+    event.preventDefault();
+    startActualGame();
+    return;
+  }
   event.preventDefault();
   queueMove(direction);
 }
 
 function handleTouchStart(event) {
+  if (!attractDismissed) startActualGame();
   void unlockAudio();
   const touch = event.changedTouches[0];
   touchStart = { x: touch.clientX, y: touch.clientY };
@@ -1501,15 +1588,21 @@ window.addEventListener("visibilitychange", () => {
 });
 restartButton.addEventListener("click", () => {
   if (audioEnabled) void unlockAudio();
+  attractDismissed = true;
+  attractOverlayElement.classList.add("hidden");
   startGame();
 });
 boardSizeSelect.addEventListener("click", () => { if (audioEnabled) void unlockAudio(); });
 boardSizeSelect.addEventListener("change", () => {
   if (audioEnabled) void unlockAudio();
+  attractDismissed = true;
+  attractOverlayElement.classList.add("hidden");
   startGame();
 });
 finishButton.addEventListener("click", finishGame);
 audioToggleButton.addEventListener("click", toggleAudioEnabled);
+startAttractButton.addEventListener("click", startActualGame);
+themeSelect.addEventListener("change", (event) => applyTheme(event.target.value));
 letterUpButton.addEventListener("pointerdown", () => { if (audioEnabled) void unlockAudio(); });
 letterDownButton.addEventListener("pointerdown", () => { if (audioEnabled) void unlockAudio(); });
 selectLetterButton.addEventListener("pointerdown", () => { if (audioEnabled) void unlockAudio(); });
@@ -1546,6 +1639,7 @@ boardElement.addEventListener("touchend", handleTouchEnd, { passive: true });
 window.addEventListener("resize", render);
 
 buildGrid();
+applyTheme(theme);
 updateAudioToggleButton();
 setRecordsPanelOpen(false);
-startGame();
+startAttractMode();

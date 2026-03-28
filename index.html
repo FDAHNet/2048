@@ -11,6 +11,18 @@
 </head>
 <body>
   <div id="ui-fx-layer" class="ui-fx-layer" aria-hidden="true"></div>
+  <div class="crt-scanlines" aria-hidden="true"></div>
+  <section id="attract-overlay" class="attract-overlay">
+    <div class="attract-card">
+      <p class="attract-topline">Angeloso Arcade System</p>
+      <h2>2048 Angeloso</h2>
+      <p class="attract-copy">Modo demo activo. Mira la partida, entra cuando quieras y rompe el hi-score.</p>
+      <div class="attract-actions">
+        <button id="start-attract-button" type="button">Pulsa para jugar</button>
+      </div>
+      <p class="attract-hint">Tambien puedes pulsar espacio, enter o tocar la pantalla.</p>
+    </div>
+  </section>
   <main class="app-shell">
     <section class="hero">
       <div>
@@ -36,6 +48,15 @@
       <p>Usa <kbd>W A S D</kbd> o <kbd>&uarr; &larr; &darr; &rarr;</kbd></p>
       <div class="control-actions">
         <button id="toggle-records-button" type="button" class="secondary-button">Mostrar records</button>
+        <label class="size-picker" for="theme-select">
+          <span>Tema</span>
+          <select id="theme-select">
+            <option value="crt">Arcade CRT</option>
+            <option value="neon">Neon</option>
+            <option value="gold">Golden Retro</option>
+            <option value="minimal">Minimal</option>
+          </select>
+        </label>
         <label class="size-picker" for="board-size">
           <span>Tablero</span>
           <select id="board-size">
@@ -50,6 +71,20 @@
     </section>
 
     <section class="board-panel">
+      <div class="cabinet-strip">
+        <div class="cabinet-pill">
+          <span>1UP</span>
+          <strong id="cabinet-score">000000</strong>
+        </div>
+        <div class="cabinet-pill cabinet-pill-center">
+          <span>HI-SCORE</span>
+          <strong id="cabinet-best">000000</strong>
+        </div>
+        <div class="cabinet-pill">
+          <span>CREDIT</span>
+          <strong>00</strong>
+        </div>
+      </div>
       <div class="board-layout">
         <aside class="journal-panel" aria-labelledby="journal-title">
           <div class="journal-header">
@@ -100,6 +135,7 @@
           <div id="replay-meta" class="replay-meta"></div>
           <div id="replay-empty" class="replay-empty hidden"></div>
           <div id="replay-controls" class="replay-controls hidden">
+            <div id="replay-mode-label" class="replay-mode-label">STOP</div>
             <div class="replay-vcr">
               <button id="replay-first-button" type="button" class="secondary-button replay-control-button">|&lt;</button>
               <button id="replay-prev-button" type="button" class="secondary-button replay-control-button">&lt;&lt;</button>
