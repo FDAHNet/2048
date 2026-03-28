@@ -137,27 +137,22 @@
       <section id="records-panel" class="records-panel records-panel-collapsed" aria-labelledby="records-title">
         <div class="records-header">
           <h2 id="records-title">Records</h2>
-          <p>Tu ranking local y la clasificacion global por modalidad.</p>
-        </div>
-        <div class="records-table">
-          <h3 class="records-subtitle">Locales</h3>
-          <div class="records-row records-row-head">
-            <span>Jugador</span>
-            <span>Modo</span>
-            <span>Puntos</span>
-            <span>Fecha</span>
-            <span>Partida</span>
-          </div>
-          <div id="records-list" class="records-list"></div>
+          <p>Clasificacion global por modalidad.</p>
         </div>
         <div class="records-table global-records-table">
           <div class="global-records-headline">
             <h3 class="records-subtitle">Globales</h3>
             <button id="submit-global-record-button" type="button" class="secondary-button hidden">Enviar records a la lista global</button>
           </div>
-          <div class="global-records-groups">
-            <section class="records-mode-group">
-              <h4 class="records-mode-title">4x4</h4>
+          <div id="global-records-groups" class="global-records-groups" data-expanded-mode="">
+            <section class="records-mode-group" data-mode="4x4">
+              <div class="records-mode-header">
+                <h4 class="records-mode-title">4x4</h4>
+                <div class="records-mode-actions">
+                  <button type="button" class="secondary-button records-mode-toggle" data-mode="4x4">Ver todo</button>
+                  <button type="button" class="danger-button records-mode-close hidden" data-mode="4x4">Cerrar</button>
+                </div>
+              </div>
               <div class="records-row records-row-head">
                 <span>Jugador</span>
                 <span>Puntos</span>
@@ -166,8 +161,14 @@
               </div>
               <div id="global-records-list-4x4" class="records-list"></div>
             </section>
-            <section class="records-mode-group">
-              <h4 class="records-mode-title">5x5</h4>
+            <section class="records-mode-group" data-mode="5x5">
+              <div class="records-mode-header">
+                <h4 class="records-mode-title">5x5</h4>
+                <div class="records-mode-actions">
+                  <button type="button" class="secondary-button records-mode-toggle" data-mode="5x5">Ver todo</button>
+                  <button type="button" class="danger-button records-mode-close hidden" data-mode="5x5">Cerrar</button>
+                </div>
+              </div>
               <div class="records-row records-row-head">
                 <span>Jugador</span>
                 <span>Puntos</span>
@@ -176,8 +177,14 @@
               </div>
               <div id="global-records-list-5x5" class="records-list"></div>
             </section>
-            <section class="records-mode-group">
-              <h4 class="records-mode-title">6x6</h4>
+            <section class="records-mode-group" data-mode="6x6">
+              <div class="records-mode-header">
+                <h4 class="records-mode-title">6x6</h4>
+                <div class="records-mode-actions">
+                  <button type="button" class="secondary-button records-mode-toggle" data-mode="6x6">Ver todo</button>
+                  <button type="button" class="danger-button records-mode-close hidden" data-mode="6x6">Cerrar</button>
+                </div>
+              </div>
               <div class="records-row records-row-head">
                 <span>Jugador</span>
                 <span>Puntos</span>
@@ -186,8 +193,14 @@
               </div>
               <div id="global-records-list-6x6" class="records-list"></div>
             </section>
-            <section class="records-mode-group">
-              <h4 class="records-mode-title">8x8</h4>
+            <section class="records-mode-group" data-mode="8x8">
+              <div class="records-mode-header">
+                <h4 class="records-mode-title">8x8</h4>
+                <div class="records-mode-actions">
+                  <button type="button" class="secondary-button records-mode-toggle" data-mode="8x8">Ver todo</button>
+                  <button type="button" class="danger-button records-mode-close hidden" data-mode="8x8">Cerrar</button>
+                </div>
+              </div>
               <div class="records-row records-row-head">
                 <span>Jugador</span>
                 <span>Puntos</span>

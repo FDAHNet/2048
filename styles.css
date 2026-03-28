@@ -921,16 +921,64 @@ button:hover {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
+  transition: grid-template-columns 360ms ease;
 }
 
 .records-mode-group {
   padding: 12px;
   border-radius: 18px;
   border: 1px solid rgba(255,255,255,0.06);
+  transition:
+    transform 320ms ease,
+    opacity 320ms ease,
+    max-height 360ms ease,
+    padding 320ms ease,
+    margin 320ms ease,
+    border-color 320ms ease;
 }
 
 .records-mode-group .records-row {
   grid-template-columns: 0.9fr 0.7fr 1.05fr 0.85fr;
+}
+
+.records-mode-header,
+.records-mode-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.records-mode-actions {
+  justify-content: flex-end;
+}
+
+.records-mode-toggle,
+.records-mode-close {
+  padding: 7px 12px;
+  font-size: 0.76rem;
+  box-shadow: none;
+}
+
+.global-records-groups[data-expanded-mode]:not([data-expanded-mode=""]) {
+  grid-template-columns: 1fr;
+}
+
+.global-records-groups[data-expanded-mode]:not([data-expanded-mode=""]) .records-mode-group.is-dimmed {
+  opacity: 0;
+  transform: scale(0.94) translateY(10px);
+  max-height: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  margin: 0;
+  overflow: hidden;
+  border-color: transparent;
+  pointer-events: none;
+}
+
+.global-records-groups[data-expanded-mode]:not([data-expanded-mode=""]) .records-mode-group.is-expanded {
+  transform: scale(1.01);
+  box-shadow: 0 16px 30px rgba(0, 0, 0, 0.22);
 }
 
 .records-mode-title,

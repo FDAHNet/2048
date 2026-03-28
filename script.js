@@ -20,10 +20,10 @@ const finishButton = document.getElementById("finish-button");
 const audioToggleButton = document.getElementById("audio-toggle-button");
 const replayIndicatorElement = document.getElementById("replay-indicator");
 const boardSizeSelect = document.getElementById("board-size");
-const recordsListElement = document.getElementById("records-list");
 const submitGlobalRecordButton = document.getElementById("submit-global-record-button");
 const recordsPanelElement = document.getElementById("records-panel");
 const toggleRecordsButton = document.getElementById("toggle-records-button");
+const globalRecordsGroupsElement = document.getElementById("global-records-groups");
 const journalListElement = document.getElementById("journal-list");
 const uiFxLayerElement = document.getElementById("ui-fx-layer");
 const attractOverlayElement = document.getElementById("attract-overlay");
@@ -74,6 +74,8 @@ let demoTimer = null;
 let attractDismissed = false;
 let theme = localStorage.getItem(THEME_KEY) || "crt";
 let gameSessionId = 0;
+let expandedRecordsMode = null;
+let globalRecordsCache = Object.fromEntries(["4x4", "5x5", "6x6", "8x8"].map((mode) => [mode, []]));
 const ARCADE_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 const GLOBAL_MODES = ["4x4", "5x5", "6x6", "8x8"];
 const globalRecordsElements = Object.fromEntries(
@@ -380,6 +382,8 @@ function isRecordScore(score) {
 }
 
 function renderRecords() {
+  if (!document.getElementById("records-list")) return;
+  const recordsListElement = document.getElementById("records-list");
   const records = loadRecords();
   recordsListElement.innerHTML = "";
 
@@ -512,12 +516,15 @@ function renderGlobalRecordsError() {
     row.textContent = "No se pudieron cargar.";
     listElement.appendChild(row);
   });
+  syncExpandedRecordsUI();
 }
 
 function renderGlobalRecords(recordsByMode) {
+  globalRecordsCache = recordsByMode;
   GLOBAL_MODES.forEach((mode) => {
     const listElement = globalRecordsElements[mode];
-    const records = recordsByMode[mode] || [];
+    const allRecords = recordsByMode[mode] || [];
+    const records = expandedRecordsMode === mode ? allRecords : allRecords.slice(0, 4);
     listElement.innerHTML = "";
 
     if (!records.length) {
@@ -551,6 +558,28 @@ function renderGlobalRecords(recordsByMode) {
       listElement.appendChild(row);
     });
   });
+  syncExpandedRecordsUI();
+}
+
+function syncExpandedRecordsUI() {
+  if (!globalRecordsGroupsElement) return;
+  globalRecordsGroupsElement.dataset.expandedMode = expandedRecordsMode || "";
+  document.querySelectorAll(".records-mode-group").forEach((group) => {
+    const isExpanded = expandedRecordsMode === group.dataset.mode;
+    group.classList.toggle("is-expanded", isExpanded);
+    group.classList.toggle("is-dimmed", Boolean(expandedRecordsMode) && !isExpanded);
+  });
+  document.querySelectorAll(".records-mode-toggle").forEach((button) => {
+    button.classList.toggle("hidden", expandedRecordsMode === button.dataset.mode);
+  });
+  document.querySelectorAll(".records-mode-close").forEach((button) => {
+    button.classList.toggle("hidden", expandedRecordsMode !== button.dataset.mode);
+  });
+}
+
+function setExpandedRecordsMode(mode) {
+  expandedRecordsMode = mode;
+  renderGlobalRecords(globalRecordsCache);
 }
 
 function parseGlobalRecord(issue) {
@@ -1675,6 +1704,12 @@ replayLastButton.addEventListener("click", () => {
   setReplayToIndex(replaySession.replay.turns.length);
 });
 toggleRecordsButton.addEventListener("click", () => setRecordsPanelOpen(!recordsPanelOpen));
+document.querySelectorAll(".records-mode-toggle").forEach((button) => {
+  button.addEventListener("click", () => setExpandedRecordsMode(button.dataset.mode));
+});
+document.querySelectorAll(".records-mode-close").forEach((button) => {
+  button.addEventListener("click", () => setExpandedRecordsMode(null));
+});
 window.addEventListener("keydown", handleKeydown);
 boardElement.addEventListener("touchstart", handleTouchStart, { passive: true });
 boardElement.addEventListener("touchend", handleTouchEnd, { passive: true });
