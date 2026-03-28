@@ -199,11 +199,7 @@ function startGame() {
     setStatus("Guarda o borra tus iniciales antes de empezar otra partida.");
     return;
   }
-  if (!replayViewerElement.classList.contains("hidden")) {
-    closeReplayViewer();
-  } else if (replayMode) {
-    stopReplayMode();
-  }
+  discardReplayState();
   maybePersistCurrentScore();
   boardSize = Number(boardSizeSelect.value);
   nextTileId = 0;
@@ -758,6 +754,25 @@ function closeReplayViewer() {
   stopReplayMode();
 }
 
+function discardReplayState() {
+  if (replayTimer) {
+    window.clearTimeout(replayTimer);
+    replayTimer = null;
+  }
+  replayMode = false;
+  replaySession = null;
+  replayResumeState = null;
+  replayViewerElement.classList.add("hidden");
+  replayMetaElement.textContent = "";
+  replayEmptyElement.textContent = "";
+  replayEmptyElement.classList.add("hidden");
+  replayControlsElement.classList.add("hidden");
+  replayProgressElement.textContent = "";
+  const boardFrame = document.querySelector(".board-frame");
+  boardFrame.classList.remove("is-replay", "replay-wipe");
+  replayIndicatorElement.classList.add("hidden");
+}
+
 function setReplayVisualState(active) {
   const boardFrame = document.querySelector(".board-frame");
   boardFrame.classList.toggle("is-replay", active);
@@ -1280,18 +1295,7 @@ async function unlockAudio() {
   return context;
 }
 
-function playTone({ frequency, duration, type = "sine", volume = 0.05, when = 0, slideTo = null }) {
-  const context = ensureAudio();
-  if (!context || !audioMasterGain) return;
-  if (context.state !== "running") {
-    unlockAudio().then((readyContext) => {
-      if (readyContext?.state === "running") {
-        playTone({ frequency, duration, type, volume, when, slideTo });
-      }
-    }).catch(() => {});
-    return;
-  }
-
+function playToneNow(context, { frequency, duration, type = "sine", volume = 0.05, when = 0, slideTo = null }) {
   const startAt = context.currentTime + when;
   const oscillator = context.createOscillator();
   const gain = context.createGain();
@@ -1308,6 +1312,20 @@ function playTone({ frequency, duration, type = "sine", volume = 0.05, when = 0,
   gain.connect(audioMasterGain);
   oscillator.start(startAt);
   oscillator.stop(startAt + duration + 0.02);
+}
+
+function playTone(options) {
+  const context = ensureAudio();
+  if (!context || !audioMasterGain) return;
+  if (context.state === "running") {
+    playToneNow(context, options);
+    return;
+  }
+
+  unlockAudio().then((readyContext) => {
+    if (!readyContext || readyContext.state !== "running") return;
+    playToneNow(readyContext, options);
+  }).catch(() => {});
 }
 
 function playMoveSound() {
