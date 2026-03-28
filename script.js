@@ -83,6 +83,7 @@ let gameSessionId = 0;
 let expandedRecordsMode = null;
 let replayArrowRotation = 0;
 let globalRecordsCache = Object.fromEntries(["4x4", "5x5", "6x6", "8x8"].map((mode) => [mode, []]));
+let globalRecordsLoaded = false;
 let globalRecordFanfarePlayed = false;
 let bestScoreBurstTimer = null;
 const ARCADE_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -312,6 +313,7 @@ function startGame(options = {}) {
   journalEntries = [];
   currentReplay = null;
   globalRecordFanfarePlayed = false;
+  globalRecordsLoaded = false;
   clearBestScoreCelebration();
   gameState = createEmptyState();
   buildGrid();
@@ -360,7 +362,7 @@ function updateScore(points) {
 }
 
 function maybeCelebrateLiveGlobalRecord() {
-  if (demoMode || globalRecordFanfarePlayed) return;
+  if (demoMode || globalRecordFanfarePlayed || !globalRecordsLoaded) return;
   const mode = `${boardSize}x${boardSize}`;
   const currentModeRecords = globalRecordsCache[mode] || [];
   const currentTopScore = currentModeRecords.length ? Math.max(...currentModeRecords.map((record) => record.score)) : 0;
@@ -646,6 +648,7 @@ function renderGlobalRecordsLoading() {
 }
 
 function renderGlobalRecordsError() {
+  globalRecordsLoaded = false;
   GLOBAL_MODES.forEach((mode) => {
     const listElement = globalRecordsElements[mode];
     listElement.innerHTML = "";
@@ -659,6 +662,7 @@ function renderGlobalRecordsError() {
 
 function renderGlobalRecords(recordsByMode) {
   globalRecordsCache = recordsByMode;
+  globalRecordsLoaded = true;
   GLOBAL_MODES.forEach((mode) => {
     const listElement = globalRecordsElements[mode];
     const allRecords = (recordsByMode[mode] || []).slice(0, MAX_RECORDS_PER_MODE);
