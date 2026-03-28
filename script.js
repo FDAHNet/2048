@@ -1,4 +1,6 @@
 const MOVE_DURATION = 210;
+const REPLAY_MOVE_DURATION = 460;
+const REPLAY_STEP_DELAY = 1180;
 const EFFECT_DURATION = 5000;
 const STORAGE_PREFIX = "smooth-2048-best-score";
 const RECORDS_PREFIX = "smooth-2048-records";
@@ -959,14 +961,21 @@ function parseGlobalRecord(issue) {
 async function fetchGlobalRecords() {
   try {
     const cacheBuster = Date.now();
-    const response = await fetch(
-      `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/issues?state=all&labels=${GLOBAL_RECORD_LABEL}&per_page=100&_=${cacheBuster}`,
-      {
-        cache: "no-store",
-      }
-    );
-    if (!response.ok) throw new Error(`GitHub ${response.status}`);
-    const issues = await response.json();
+    const issues = [];
+
+    for (let page = 1; page <= 10; page += 1) {
+      const response = await fetch(
+        `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/issues?state=all&labels=${GLOBAL_RECORD_LABEL}&per_page=100&page=${page}&_=${cacheBuster}`,
+        {
+          cache: "no-store",
+        }
+      );
+      if (!response.ok) throw new Error(`GitHub ${response.status}`);
+      const pageIssues = await response.json();
+      issues.push(...pageIssues);
+      if (pageIssues.length < 100) break;
+    }
+
     const records = issues
       .filter((issue) => !issue.pull_request)
       .map(parseGlobalRecord)
@@ -1277,7 +1286,8 @@ function insertReplaySpawn(spawn) {
   gameState.cells[spawn.row][spawn.col] = tile;
 }
 
-function replayMove(direction, spawn) {
+function replayMove(direction, spawn, options = {}) {
+  const { animate = false } = options;
   const vectors = {
     up: [-1, 0],
     down: [1, 0],
@@ -1287,6 +1297,7 @@ function replayMove(direction, spawn) {
   const [dr, dc] = vectors[direction];
   const traversed = getTraversal(direction);
   const mergedTargets = new Set();
+  const mergeGhosts = [];
   let gained = 0;
 
   resetFlags();
@@ -1316,6 +1327,15 @@ function replayMove(direction, spawn) {
       gameState.cells[row][col] = null;
 
       if (target && target.value === tile.value && !mergedTargets.has(targetKey)) {
+        if (animate) {
+          mergeGhosts.push({
+            fromRow: row,
+            fromCol: col,
+            toRow: target.row,
+            toCol: target.col,
+            value: tile.value,
+          });
+        }
         target.value = tile.value * 2;
         target.justMerged = true;
         mergedTargets.add(targetKey);
@@ -1331,7 +1351,10 @@ function replayMove(direction, spawn) {
   gameState.cells = normalizeCells();
   gameState.score += gained;
   if (spawn) insertReplaySpawn(spawn);
-  render();
+  if (animate) {
+    render();
+    mergeGhosts.forEach((ghost) => createMergeGhost(ghost));
+  }
 }
 
 function initializeReplayBoard(replay) {
@@ -1341,20 +1364,36 @@ function initializeReplayBoard(replay) {
   gameState.cells = Array.from({ length: boardSize }, () => Array(boardSize).fill(null));
   nextTileId = 0;
   replay.start.forEach((spawn) => insertReplaySpawn(spawn));
-  render();
 }
 
 function setReplayToIndex(index) {
   if (!replaySession || !replayMode) return;
 
   const boundedIndex = Math.max(0, Math.min(index, replaySession.replay.turns.length));
-  initializeReplayBoard(replaySession.replay);
+  const currentIndex = replaySession.index || 0;
 
+  if (boundedIndex === currentIndex) return;
+
+  if (boundedIndex === currentIndex + 1) {
+    const turn = replaySession.replay.turns[currentIndex];
+    updateReplayArrow(turn.move);
+    replayMove(turn.move, turn.spawn, { animate: true });
+    replaySession.index = boundedIndex;
+    updateReplayControls();
+    if (boundedIndex >= replaySession.replay.turns.length) {
+      setStatus("Replay finalizada.");
+    } else {
+      setStatus(`Replay ${replaySession.replay.mode}: paso ${boundedIndex} de ${replaySession.replay.turns.length}.`);
+    }
+    return;
+  }
+
+  initializeReplayBoard(replaySession.replay);
   for (let turnIndex = 0; turnIndex < boundedIndex; turnIndex += 1) {
     const turn = replaySession.replay.turns[turnIndex];
     replayMove(turn.move, turn.spawn);
   }
-
+  render();
   replaySession.index = boundedIndex;
   const currentTurn = boundedIndex > 0 ? replaySession.replay.turns[boundedIndex - 1] : null;
   updateReplayArrow(currentTurn?.move || "");
@@ -1380,7 +1419,7 @@ function scheduleReplayPlayback() {
     if (!replaySession || !replayMode) return;
     setReplayToIndex(replaySession.index + 1);
     scheduleReplayPlayback();
-  }, 900);
+  }, REPLAY_STEP_DELAY);
 }
 
 function pauseReplayPlayback() {
@@ -1430,6 +1469,7 @@ function startReplayOnBoard(replay) {
   gameState.over = true;
   gameState.cells = Array.from({ length: boardSize }, () => Array(boardSize).fill(null));
   buildGrid();
+  initializeReplayBoard(replay);
   render();
   updateReplayArrow("");
   triggerReplayWipe();
