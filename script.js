@@ -677,9 +677,12 @@ function renderGlobalRecords(recordsByMode) {
       return;
     }
 
-    records.forEach((record) => {
+    records.forEach((record, index) => {
       const row = document.createElement("div");
       row.className = "records-row";
+
+      const rank = document.createElement("span");
+      rank.textContent = expandedRecordsMode === mode ? String(index + 1) : "";
 
       const initials = document.createElement("span");
       initials.textContent = record.initials;
@@ -696,7 +699,7 @@ function renderGlobalRecords(recordsByMode) {
       action.textContent = "Ver partida";
       action.addEventListener("click", () => openReplayViewer(record.replay, record));
 
-      row.append(initials, score, timestamp, action);
+      row.append(rank, initials, score, timestamp, action);
       listElement.appendChild(row);
     });
   });
