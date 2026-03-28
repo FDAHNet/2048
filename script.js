@@ -29,6 +29,7 @@ const globalRecordsGroupsElement = document.getElementById("global-records-group
 const journalListElement = document.getElementById("journal-list");
 const journalTitleElement = document.getElementById("journal-title");
 const journalSubtitleElement = document.getElementById("journal-subtitle");
+const gameTimerElement = document.getElementById("game-timer");
 const uiFxLayerElement = document.getElementById("ui-fx-layer");
 const starfieldElement = document.getElementById("starfield");
 const attractOverlayElement = document.getElementById("attract-overlay");
@@ -86,6 +87,9 @@ let globalRecordsCache = Object.fromEntries(["4x4", "5x5", "6x6", "8x8"].map((mo
 let globalRecordsLoaded = false;
 let globalRecordFanfarePlayed = false;
 let bestScoreBurstTimer = null;
+let gameTimerStartedAt = 0;
+let gameTimerInterval = null;
+let lastTimerMilestone = 0;
 const ARCADE_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 const GLOBAL_MODES = ["4x4", "5x5", "6x6", "8x8"];
 const globalRecordsElements = Object.fromEntries(
@@ -117,6 +121,68 @@ function updateAudioToggleButton() {
 
 function setGameOverOverlay(visible) {
   gameOverOverlayElement.classList.toggle("hidden", !visible);
+}
+
+function formatElapsedTime(ms) {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
+
+function renderGameTimer() {
+  if (!gameTimerElement) return;
+  if (replayMode) {
+    gameTimerElement.textContent = "REPLAY";
+    return;
+  }
+  gameTimerElement.textContent = formatElapsedTime(Date.now() - gameTimerStartedAt);
+}
+
+function stopGameTimer() {
+  if (gameTimerInterval) {
+    window.clearInterval(gameTimerInterval);
+    gameTimerInterval = null;
+  }
+}
+
+function startGameTimer() {
+  stopGameTimer();
+  gameTimerStartedAt = Date.now();
+  lastTimerMilestone = 0;
+  renderGameTimer();
+  gameTimerInterval = window.setInterval(() => {
+    if (replayMode || gameState.over || demoMode) return;
+    renderGameTimer();
+    maybeCelebrateTimeMilestone();
+  }, 250);
+}
+
+function maybeCelebrateTimeMilestone() {
+  if (replayMode || gameState.over || demoMode) return;
+  const elapsedMs = Date.now() - gameTimerStartedAt;
+  const milestone = Math.floor(elapsedMs / 300000);
+  if (milestone <= 0 || milestone === lastTimerMilestone) return;
+  lastTimerMilestone = milestone;
+  triggerTimeMilestoneFx(milestone * 5);
+}
+
+function triggerTimeMilestoneFx(minutes) {
+  if (gameTimerElement) {
+    gameTimerElement.classList.remove("timer-milestone");
+    void gameTimerElement.offsetWidth;
+    gameTimerElement.classList.add("timer-milestone");
+  }
+
+  const marker = document.createElement("div");
+  marker.className = "time-milestone-banner";
+  marker.textContent = `${minutes} MIN`;
+  uiFxLayerElement.appendChild(marker);
+  marker.addEventListener("animationend", () => marker.remove(), { once: true });
+
+  playTimeMilestoneSound();
+  setStatus(`${minutes} minutos de partida.`);
 }
 
 function stopDemoMode() {
@@ -315,6 +381,7 @@ function startGame(options = {}) {
   globalRecordFanfarePlayed = false;
   globalRecordsLoaded = false;
   clearBestScoreCelebration();
+  startGameTimer();
   gameState = createEmptyState();
   buildGrid();
   const startSpawnA = addRandomTile();
@@ -1012,6 +1079,7 @@ function discardReplayState() {
   const boardFrame = document.querySelector(".board-frame");
   boardFrame.classList.remove("is-replay", "replay-wipe");
   replayIndicatorElement.classList.add("hidden");
+  renderGameTimer();
   renderJournal();
 }
 
@@ -1044,6 +1112,7 @@ function stopReplayMode() {
   gameState = cloneGameState(replayResumeState.gameState);
   nextTileId = replayResumeState.nextTileId;
   render();
+  renderGameTimer();
   renderJournal();
   setStatus(replayResumeState.statusText);
   replayResumeState = null;
@@ -1216,6 +1285,7 @@ function startReplayOnBoard(replay) {
   stopReplayMode();
   setGameOverOverlay(false);
   replayMode = true;
+  renderGameTimer();
   replayResumeState = {
     boardSize,
     gameState: cloneGameState(gameState),
@@ -1321,6 +1391,7 @@ function finishGame() {
   if (demoMode) return;
   if (gameState.over || isAnimating || initialsEntryState.active) return;
   gameState.over = true;
+  renderGameTimer();
   setGameOverOverlay(true);
   maybePersistCurrentScore();
   if (!initialsEntryState.active) setStatus("Partida finalizada.");
@@ -1507,6 +1578,7 @@ function move(direction) {
       setStatus(demoMode ? "MODO DEMO" : "Llegaste a 2048. Puedes seguir jugando.");
     } else if (!canMove()) {
       gameState.over = true;
+      renderGameTimer();
       if (!demoMode) {
         setGameOverOverlay(true);
         maybePersistCurrentScore();
@@ -1717,6 +1789,20 @@ function playGlobalRecordFanfare() {
     });
   });
   playTone({ frequency: 783.99, duration: 0.5, type: "sine", volume: 0.08, when: 0.92, slideTo: 1046.5 });
+}
+
+function playTimeMilestoneSound() {
+  const notes = [392, 523.25, 659.25, 783.99];
+  notes.forEach((note, index) => {
+    playTone({
+      frequency: note,
+      duration: 0.18,
+      type: index % 2 === 0 ? "triangle" : "square",
+      volume: 0.08,
+      when: index * 0.08,
+      slideTo: note * 1.03,
+    });
+  });
 }
 
 function queueMove(direction) {
