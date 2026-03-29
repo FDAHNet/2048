@@ -35,7 +35,7 @@
       <div class="hud">
         <div id="credits-card" class="score-card credits-card hidden">
           <span>Creditos</span>
-          <strong id="credits">100</strong>
+          <strong id="credits" role="button" tabindex="0" aria-label="Ver extracto de creditos">100</strong>
           <div id="advanced-mini-toggle" class="advanced-mini-toggle hidden">
             <span class="advanced-mini-label">Apuestas de la partida</span>
             <button id="advanced-mini-expand-button" type="button" class="secondary-button advanced-mini-button">Expandir</button>
@@ -357,6 +357,33 @@
         </div>
         <div id="admin-panel-status" class="admin-panel-status">Pulsa C T R L durante la partida para abrir este panel.</div>
         <div id="admin-summary-grid" class="admin-summary-grid"></div>
+        <section class="admin-card admin-bets-editor">
+          <div class="admin-card-head">
+            <h3>Tipos de Apuesta</h3>
+            <div class="admin-bets-editor-actions">
+              <button id="admin-add-bet-button" type="button" class="secondary-button">Nueva apuesta</button>
+              <button id="admin-save-bets-button" type="button">Guardar apuestas</button>
+            </div>
+          </div>
+          <div class="admin-table-wrap">
+            <table class="admin-table admin-bets-table">
+              <thead>
+                <tr>
+                  <th>On</th>
+                  <th>Nombre</th>
+                  <th>Explicacion</th>
+                  <th>Multiplicador</th>
+                  <th>Opcion 1</th>
+                  <th>Opcion 2</th>
+                  <th>Regla</th>
+                  <th>Objetivo</th>
+                  <th>Accion</th>
+                </tr>
+              </thead>
+              <tbody id="admin-bets-body"></tbody>
+            </table>
+          </div>
+        </section>
         <div class="admin-columns">
           <section class="admin-card">
             <div class="admin-card-head">
@@ -387,6 +414,41 @@
               </table>
             </div>
           </section>
+        </div>
+      </div>
+    </section>
+    <section id="ledger-panel" class="admin-panel hidden" aria-labelledby="ledger-panel-title">
+      <div class="admin-panel-shell ledger-panel-shell">
+        <div class="admin-panel-header">
+          <div>
+            <p class="initials-eyebrow">Creditos</p>
+            <h2 id="ledger-panel-title">Extracto Bancario</h2>
+            <p id="ledger-panel-copy" class="admin-panel-copy">Saldo y movimientos del jugador avanzado.</p>
+          </div>
+          <div class="admin-panel-actions">
+            <button id="refresh-ledger-button" type="button" class="secondary-button">Refrescar</button>
+            <button id="close-ledger-button" type="button" class="stats-close-button" aria-label="Cerrar extracto">X</button>
+          </div>
+        </div>
+        <div id="ledger-summary-grid" class="admin-summary-grid"></div>
+        <div class="admin-card">
+          <div class="admin-card-head">
+            <h3>Movimientos</h3>
+          </div>
+          <div class="admin-table-wrap">
+            <table class="admin-table ledger-table">
+              <thead>
+                <tr>
+                  <th>Fecha</th>
+                  <th>Tipo</th>
+                  <th>Detalle</th>
+                  <th>Importe</th>
+                  <th>Saldo</th>
+                </tr>
+              </thead>
+              <tbody id="ledger-body"></tbody>
+            </table>
+          </div>
         </div>
       </div>
     </section>

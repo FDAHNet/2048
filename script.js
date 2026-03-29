@@ -30,36 +30,47 @@ const RECORD_CATEGORY_LABELS = {
 };
 const DEFAULT_ADVANCED_CREDITS = 100;
 const ADVANCED_BET_STAKES = [0, 5, 10, 20, 50];
-const ADVANCED_BET_DEFINITIONS = [
+const ADVANCED_BET_RULES = [
+  { value: "reasonUser", label: "Finaliza BY USER" },
+  { value: "highestTileGte", label: "Ficha maxima >= objetivo" },
+  { value: "durationMinutesGte", label: "Duracion >= objetivo min" },
+  { value: "scoreGte", label: "Puntuacion >= objetivo" },
+  { value: "movesGte", label: "Jugadas >= objetivo" },
+  { value: "holeUsed", label: "Se usa H.O.L.E." },
+];
+const DEFAULT_ADVANCED_BET_DEFINITIONS = [
   {
     id: "endReason",
     label: "Final de partida",
     description: "Adivina si termina por tu boton o por la maquina.",
-    options: [
-      { value: "user", label: "BY USER", payout: 2.1 },
-      { value: "machine", label: "BY MACHINE", payout: 1.8 },
-    ],
+    multiplier: 2.1,
+    optionA: "BY USER",
+    optionB: "BY MACHINE",
+    rule: "reasonUser",
+    target: "",
+    active: true,
   },
   {
-    id: "maxTile",
-    label: "Ficha maxima",
-    description: "Predice la ficha mas alta conseguida al terminar.",
-    options: [
-      { value: "128", label: "128+", payout: 1.6 },
-      { value: "256", label: "256+", payout: 2.1 },
-      { value: "512", label: "512+", payout: 3.4 },
-      { value: "1024", label: "1024+", payout: 5.8 },
-    ],
+    id: "maxTile256",
+    label: "Ficha 256",
+    description: "Apuesta si la partida llega a una ficha 256 o mayor.",
+    multiplier: 2.1,
+    optionA: "256 o mas",
+    optionB: "Menos de 256",
+    rule: "highestTileGte",
+    target: "256",
+    active: true,
   },
   {
-    id: "duration",
-    label: "Duracion",
-    description: "Acertar cuanto dura la partida en tiempo real.",
-    options: [
-      { value: "short", label: "Menos de 05:00", payout: 2.4 },
-      { value: "mid", label: "05:00 a 15:00", payout: 2.1 },
-      { value: "long", label: "Mas de 15:00", payout: 3.2 },
-    ],
+    id: "duration5",
+    label: "Partida larga",
+    description: "Predice si la partida dura cinco minutos o mas.",
+    multiplier: 2.4,
+    optionA: "05:00 o mas",
+    optionB: "Menos de 05:00",
+    rule: "durationMinutesGte",
+    target: "5",
+    active: true,
   },
 ];
 
@@ -112,6 +123,15 @@ const adminUsersBodyElement = document.getElementById("admin-users-body");
 const adminPanelStatusElement = document.getElementById("admin-panel-status");
 const closeAdminButton = document.getElementById("close-admin-button");
 const refreshAdminButton = document.getElementById("refresh-admin-button");
+const adminBetsBodyElement = document.getElementById("admin-bets-body");
+const adminAddBetButton = document.getElementById("admin-add-bet-button");
+const adminSaveBetsButton = document.getElementById("admin-save-bets-button");
+const ledgerPanelElement = document.getElementById("ledger-panel");
+const closeLedgerButton = document.getElementById("close-ledger-button");
+const refreshLedgerButton = document.getElementById("refresh-ledger-button");
+const ledgerSummaryGridElement = document.getElementById("ledger-summary-grid");
+const ledgerBodyElement = document.getElementById("ledger-body");
+const ledgerPanelCopyElement = document.getElementById("ledger-panel-copy");
 const uiFxLayerElement = document.getElementById("ui-fx-layer");
 const starfieldElement = document.getElementById("starfield");
 const attractOverlayElement = document.getElementById("attract-overlay");
@@ -164,10 +184,12 @@ let audioUnlocked = false;
 let audioEnabled = localStorage.getItem(AUDIO_ENABLED_KEY) === "true";
 let recordSaved = false;
 let pendingGlobalRecord = null;
-let advancedMode = localStorage.getItem(ADVANCED_MODE_KEY) === "true";
+let advancedMode = false;
 let advancedPlayerAuth = loadAdvancedPlayerAuth();
 let advancedCredits = Number(advancedPlayerAuth?.credits ?? DEFAULT_ADVANCED_CREDITS);
+let advancedBetDefinitions = cloneAdvancedBetDefinitions(DEFAULT_ADVANCED_BET_DEFINITIONS);
 let advancedBetDraft = loadAdvancedBetDraft();
+localStorage.setItem(ADVANCED_MODE_KEY, "false");
 let activeAdvancedRound = null;
 let advancedBetResultMessage = "";
 let awaitingManualStart = false;
@@ -198,6 +220,10 @@ let statsPanelOpen = false;
 let adminPanelOpen = false;
 let adminPanelLoading = false;
 let adminOverview = null;
+let adminBetDefinitionsDraft = [];
+let ledgerPanelOpen = false;
+let ledgerLoading = false;
+let ledgerData = null;
 let lastGameOverReason = "";
 let globalRecordsCache = Object.fromEntries(
   ["4x4", "5x5", "6x6", "8x8"].map((mode) => [
@@ -287,9 +313,74 @@ function saveAdvancedPlayerAuth(auth) {
   localStorage.setItem(ADVANCED_PLAYER_AUTH_KEY, JSON.stringify(auth));
 }
 
+function slugifyBetId(value) {
+  const normalized = String(value || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return normalized || `bet-${Date.now()}`;
+}
+
+function cloneAdvancedBetDefinitions(definitions) {
+  return (definitions || []).map((definition) => ({ ...definition }));
+}
+
+function normalizeAdvancedBetDefinition(definition, index = 0) {
+  const rule = ADVANCED_BET_RULES.some((entry) => entry.value === definition?.rule)
+    ? definition.rule
+    : "reasonUser";
+  return {
+    id: String(definition?.id || slugifyBetId(definition?.label || `bet-${index + 1}`)),
+    label: String(definition?.label || `Apuesta ${index + 1}`).slice(0, 36),
+    description: String(definition?.description || "Sin explicacion.").slice(0, 120),
+    multiplier: Math.max(1.1, Math.min(99, Number(definition?.multiplier || 2))),
+    optionA: String(definition?.optionA || "Opcion 1").slice(0, 28),
+    optionB: String(definition?.optionB || "Opcion 2").slice(0, 28),
+    rule,
+    target: String(definition?.target ?? ""),
+    active: Boolean(definition?.active),
+  };
+}
+
+function getActiveAdvancedBetDefinitions() {
+  return advancedBetDefinitions.filter((definition) => definition.active);
+}
+
+function createEmptyAdminBetDefinition() {
+  return normalizeAdvancedBetDefinition({
+    id: `bet-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+    label: "Nueva apuesta",
+    description: "Describe brevemente que se esta apostando.",
+    multiplier: 2,
+    optionA: "SI",
+    optionB: "NO",
+    rule: "scoreGte",
+    target: "1000",
+    active: true,
+  });
+}
+
+function refreshAdvancedBetDraftAgainstDefinitions() {
+  const nextDraft = createDefaultAdvancedBetDraft();
+  advancedBetDefinitions.forEach((definition) => {
+    const existing = advancedBetDraft?.[definition.id];
+    if (!existing) return;
+    const validPrediction = ["A", "B", ""].includes(existing.prediction) ? existing.prediction : "";
+    const validStake = ADVANCED_BET_STAKES.includes(Number(existing.stake)) ? Number(existing.stake) : 0;
+    nextDraft[definition.id] = {
+      prediction: validPrediction,
+      stake: validStake,
+    };
+  });
+  advancedBetDraft = nextDraft;
+  saveAdvancedBetDraft();
+}
+
 function createDefaultAdvancedBetDraft() {
   return Object.fromEntries(
-    ADVANCED_BET_DEFINITIONS.map((definition) => [
+    advancedBetDefinitions.map((definition) => [
       definition.id,
       {
         prediction: "",
@@ -305,12 +396,10 @@ function loadAdvancedBetDraft() {
     if (!raw) return createDefaultAdvancedBetDraft();
     const parsed = JSON.parse(raw);
     const nextDraft = createDefaultAdvancedBetDraft();
-    ADVANCED_BET_DEFINITIONS.forEach((definition) => {
+    advancedBetDefinitions.forEach((definition) => {
       const entry = parsed?.[definition.id];
       if (!entry) return;
-      const validPrediction = definition.options.some((option) => option.value === entry.prediction)
-        ? entry.prediction
-        : "";
+      const validPrediction = ["A", "B", ""].includes(entry.prediction) ? entry.prediction : "";
       const validStake = ADVANCED_BET_STAKES.includes(Number(entry.stake)) ? Number(entry.stake) : 0;
       nextDraft[definition.id] = { prediction: validPrediction, stake: validStake };
     });
@@ -333,27 +422,22 @@ function cloneAdvancedRound(round) {
 }
 
 function getAdvancedBetDefinition(id) {
-  return ADVANCED_BET_DEFINITIONS.find((definition) => definition.id === id) || null;
-}
-
-function getAdvancedBetOption(definitionId, value) {
-  const definition = getAdvancedBetDefinition(definitionId);
-  return definition?.options.find((option) => option.value === value) || null;
+  return advancedBetDefinitions.find((definition) => definition.id === id) || null;
 }
 
 function buildAdvancedRoundFromDraft() {
-  const wagers = ADVANCED_BET_DEFINITIONS
+  const wagers = getActiveAdvancedBetDefinitions()
     .map((definition) => {
       const draft = advancedBetDraft?.[definition.id];
       const stake = Number(draft?.stake || 0);
-      const option = getAdvancedBetOption(definition.id, draft?.prediction);
-      if (!stake || !option) return null;
+      const prediction = draft?.prediction;
+      if (!stake || !["A", "B"].includes(prediction)) return null;
       return {
         id: definition.id,
         label: definition.label,
-        prediction: option.value,
-        predictionLabel: option.label,
-        payout: option.payout,
+        prediction,
+        predictionLabel: prediction === "A" ? definition.optionA : definition.optionB,
+        payout: Number(definition.multiplier || 2),
         stake,
       };
     })
@@ -373,20 +457,29 @@ function buildAdvancedRoundFromDraft() {
 }
 
 function evaluateAdvancedBet(id, prediction, context) {
-  if (id === "endReason") {
-    return prediction === (context.reason === "BY USER" ? "user" : "machine");
+  const definition = getAdvancedBetDefinition(id);
+  if (!definition) return false;
+  return prediction === resolveAdvancedBetWinningSide(definition, context);
+}
+
+function resolveAdvancedBetWinningSide(definition, context) {
+  const numericTarget = Number(definition.target || 0);
+  switch (definition.rule) {
+    case "reasonUser":
+      return context.reason === "BY USER" ? "A" : "B";
+    case "highestTileGte":
+      return Number(context.highestTile || 0) >= numericTarget ? "A" : "B";
+    case "durationMinutesGte":
+      return Number(context.elapsedMs || 0) >= numericTarget * 60 * 1000 ? "A" : "B";
+    case "scoreGte":
+      return Number(context.score || 0) >= numericTarget ? "A" : "B";
+    case "movesGte":
+      return Number(context.moves || 0) >= numericTarget ? "A" : "B";
+    case "holeUsed":
+      return Boolean(context.holeUsed) ? "A" : "B";
+    default:
+      return "B";
   }
-  if (id === "maxTile") {
-    const highestTile = Number(context.highestTile || 0);
-    return highestTile >= Number(prediction);
-  }
-  if (id === "duration") {
-    const elapsedMs = Number(context.elapsedMs || 0);
-    if (prediction === "short") return elapsedMs < 5 * 60 * 1000;
-    if (prediction === "mid") return elapsedMs >= 5 * 60 * 1000 && elapsedMs < 15 * 60 * 1000;
-    if (prediction === "long") return elapsedMs >= 15 * 60 * 1000;
-  }
-  return false;
 }
 
 function setAdvancedRoundVoided(reason) {
@@ -453,9 +546,9 @@ function renderAdvancedBetsPanel() {
   }
 
   advancedBetsListElement.innerHTML = "";
-  ADVANCED_BET_DEFINITIONS.forEach((definition) => {
+  getActiveAdvancedBetDefinitions().forEach((definition) => {
     const draft = advancedBetDraft?.[definition.id] || { prediction: "", stake: 0 };
-    const option = getAdvancedBetOption(definition.id, draft.prediction);
+    const optionLabel = draft.prediction === "A" ? definition.optionA : draft.prediction === "B" ? definition.optionB : "";
 
     const row = document.createElement("div");
     row.className = "advanced-bet-row";
@@ -472,7 +565,7 @@ function renderAdvancedBetsPanel() {
 
     const payout = document.createElement("small");
     payout.className = "advanced-bet-payout";
-    payout.textContent = option ? `Premio x${option.payout.toFixed(1)} si aciertas` : "Sin apuesta preparada";
+    payout.textContent = optionLabel ? `Premio x${Number(definition.multiplier || 2).toFixed(2)} si aciertas` : "Sin apuesta preparada";
 
     copy.append(label, desc, payout);
 
@@ -485,11 +578,11 @@ function renderAdvancedBetsPanel() {
     emptyPredictionOption.textContent = "Sin apuesta";
     if (!draft.prediction) emptyPredictionOption.selected = true;
     predictionSelect.appendChild(emptyPredictionOption);
-    definition.options.forEach((entry) => {
+    [["A", definition.optionA], ["B", definition.optionB]].forEach(([value, labelText]) => {
       const optionElement = document.createElement("option");
-      optionElement.value = entry.value;
-      optionElement.textContent = entry.label;
-      if (entry.value === draft.prediction) optionElement.selected = true;
+      optionElement.value = value;
+      optionElement.textContent = labelText;
+      if (value === draft.prediction) optionElement.selected = true;
       predictionSelect.appendChild(optionElement);
     });
     predictionSelect.addEventListener("change", () => {
@@ -615,6 +708,27 @@ async function syncAdvancedCredits(nextCredits) {
   return body;
 }
 
+async function recordAdvancedWager(round) {
+  if (!advancedPlayerAuth?.alias || !advancedPlayerAuth?.pinHash || !round?.wagers?.length) return;
+  try {
+    await postWorkerJson("/player/wager", {
+      alias: advancedPlayerAuth.alias,
+      pinHash: advancedPlayerAuth.pinHash,
+      mode: round.mode,
+      category: getCurrentRecordCategory(),
+      totalStake: Number(round.totalStake || 0),
+      creditsAfter: advancedCredits,
+      wagers: round.wagers.map((wager) => ({
+        label: wager.label,
+        predictionLabel: wager.predictionLabel,
+        stake: wager.stake,
+      })),
+    });
+  } catch (error) {
+    console.warn("No pude registrar la apuesta:", error);
+  }
+}
+
 async function reportAdvancedSession(reason, settlement = {}) {
   if (!advancedMode || demoMode || advancedSessionReported) return;
   if (!advancedPlayerAuth?.alias || !advancedPlayerAuth?.pinHash) return;
@@ -674,6 +788,9 @@ async function settleAdvancedRound(reason) {
     reason,
     elapsedMs: getElapsedMs(),
     highestTile: getHighestTileValue(),
+    score: gameState.score,
+    moves: moveSequence,
+    holeUsed: holeRunUsed,
   };
 
   const winners = round.wagers.filter((wager) => evaluateAdvancedBet(wager.id, wager.prediction, context));
@@ -795,11 +912,14 @@ function renderAdminOverview() {
     adminSummaryGridElement.innerHTML = "";
     adminRecordsGridElement.innerHTML = "";
     adminUsersBodyElement.innerHTML = '<tr><td class="admin-table-empty" colspan="9">Sin datos todavia.</td></tr>';
+    if (adminBetsBodyElement) {
+      adminBetsBodyElement.innerHTML = '<tr><td class="admin-table-empty" colspan="9">Cargando tipos de apuesta...</td></tr>';
+    }
     adminPanelStatusElement.textContent = adminPanelLoading ? "Cargando panel de control..." : "Pulsa Refrescar para leer el estado global.";
     return;
   }
 
-  const { summary = {}, players = [], recordsByMode = {} } = adminOverview;
+  const { summary = {}, players = [], recordsByMode = {}, betDefinitions = [] } = adminOverview;
   adminPanelStatusElement.textContent = `Actualizado: ${formatAdminDate(summary.generatedAt)}. Usuarios ${formatAdminNumber(summary.totalUsers)}.`;
 
   const summaryCards = [
@@ -846,6 +966,9 @@ function renderAdminOverview() {
       <td>${escapeHtml(formatAdminDate(player.lastSeen))}</td>
     </tr>
   `).join("");
+
+  adminBetDefinitionsDraft = cloneAdvancedBetDefinitions(betDefinitions.length ? betDefinitions : advancedBetDefinitions);
+  renderAdminBetDefinitionsEditor();
 }
 
 async function loadAdminOverview(force = false) {
@@ -854,12 +977,234 @@ async function loadAdminOverview(force = false) {
   renderAdminOverview();
   try {
     adminOverview = await postWorkerJson("/admin/overview", {});
+    if (Array.isArray(adminOverview?.betDefinitions) && adminOverview.betDefinitions.length) {
+      advancedBetDefinitions = adminOverview.betDefinitions.map(normalizeAdvancedBetDefinition);
+      refreshAdvancedBetDraftAgainstDefinitions();
+      updateAdvancedModeUI();
+    }
   } catch (error) {
     adminPanelStatusElement.textContent = `No pude cargar el panel: ${error.message}`;
   } finally {
     adminPanelLoading = false;
     renderAdminOverview();
   }
+}
+
+function renderLedgerPanel() {
+  if (!ledgerSummaryGridElement || !ledgerBodyElement || !ledgerPanelCopyElement) return;
+  if (!ledgerData) {
+    ledgerPanelCopyElement.textContent = ledgerLoading
+      ? "Cargando extracto..."
+      : "Saldo y movimientos del jugador avanzado.";
+    ledgerSummaryGridElement.innerHTML = "";
+    ledgerBodyElement.innerHTML = '<tr><td class="admin-table-empty" colspan="5">Sin movimientos todavia.</td></tr>';
+    return;
+  }
+
+  ledgerPanelCopyElement.textContent = `${ledgerData.alias} · saldo actual ${formatAdminNumber(ledgerData.credits)} creditos.`;
+  const summaryCards = [
+    { label: "Saldo", value: formatAdminNumber(ledgerData.credits) },
+    { label: "Movimientos", value: formatAdminNumber(ledgerData.entries.length) },
+    { label: "Apostado", value: formatAdminNumber(ledgerData.totalWagered || 0) },
+    { label: "Pagado", value: formatAdminNumber(ledgerData.totalPayout || 0) },
+    { label: "Partidas", value: formatAdminNumber(ledgerData.gamesPlayed || 0) },
+    { label: "Mejor", value: formatAdminNumber(ledgerData.bestScore || 0) },
+  ];
+  ledgerSummaryGridElement.innerHTML = summaryCards.map((card) => `
+    <article class="admin-summary-card">
+      <small class="admin-summary-card-label">${escapeHtml(card.label)}</small>
+      <strong class="admin-summary-card-value">${escapeHtml(card.value)}</strong>
+    </article>
+  `).join("");
+
+  if (!ledgerData.entries.length) {
+    ledgerBodyElement.innerHTML = '<tr><td class="admin-table-empty" colspan="5">Todavia no hay movimientos registrados.</td></tr>';
+    return;
+  }
+
+  ledgerBodyElement.innerHTML = ledgerData.entries.map((entry) => {
+    const amount = Number(entry.amount || 0);
+    const amountClass = amount >= 0 ? "ledger-positive" : "ledger-negative";
+    const amountText = `${amount >= 0 ? "+" : ""}${formatAdminNumber(amount)}`;
+    return `
+      <tr>
+        <td>${escapeHtml(formatAdminDate(entry.date))}</td>
+        <td>${escapeHtml(entry.type || "--")}</td>
+        <td>${escapeHtml(entry.detail || "--")}</td>
+        <td class="${amountClass}">${escapeHtml(amountText)}</td>
+        <td>${escapeHtml(formatAdminNumber(entry.balanceAfter || 0))}</td>
+      </tr>
+    `;
+  }).join("");
+}
+
+async function loadLedger(force = false) {
+  if (ledgerLoading && !force) return;
+  if (!advancedPlayerAuth?.alias || !advancedPlayerAuth?.pinHash) {
+    setStatus("Entra con alias y PIN para ver el extracto.");
+    return;
+  }
+  ledgerLoading = true;
+  renderLedgerPanel();
+  try {
+    ledgerData = await postWorkerJson("/player/ledger", {
+      alias: advancedPlayerAuth.alias,
+      pinHash: advancedPlayerAuth.pinHash,
+    });
+  } catch (error) {
+    setStatus(`No pude cargar el extracto: ${error.message}`);
+  } finally {
+    ledgerLoading = false;
+    renderLedgerPanel();
+  }
+}
+
+function setLedgerPanelOpen(nextOpen) {
+  ledgerPanelOpen = Boolean(nextOpen);
+  ledgerPanelElement?.classList.toggle("hidden", !ledgerPanelOpen);
+  if (ledgerPanelOpen) {
+    renderLedgerPanel();
+    void loadLedger();
+  }
+}
+
+function renderAdminBetDefinitionsEditor() {
+  if (!adminBetsBodyElement) return;
+  if (!adminBetDefinitionsDraft.length) {
+    adminBetsBodyElement.innerHTML = '<tr><td class="admin-table-empty" colspan="9">No hay tipos de apuesta definidos.</td></tr>';
+    return;
+  }
+
+  adminBetsBodyElement.innerHTML = "";
+  adminBetDefinitionsDraft.forEach((definition, index) => {
+    const row = document.createElement("tr");
+
+    const activeCell = document.createElement("td");
+    const activeInput = document.createElement("input");
+    activeInput.type = "checkbox";
+    activeInput.checked = Boolean(definition.active);
+    activeInput.addEventListener("change", () => {
+      definition.active = activeInput.checked;
+    });
+    activeCell.appendChild(activeInput);
+
+    const labelCell = document.createElement("td");
+    const labelInput = document.createElement("input");
+    labelInput.value = definition.label;
+    labelInput.maxLength = 36;
+    labelInput.addEventListener("input", () => {
+      definition.label = labelInput.value;
+      if (!definition.id) definition.id = slugifyBetId(labelInput.value);
+    });
+    labelCell.appendChild(labelInput);
+
+    const descCell = document.createElement("td");
+    const descInput = document.createElement("input");
+    descInput.value = definition.description;
+    descInput.maxLength = 120;
+    descInput.addEventListener("input", () => {
+      definition.description = descInput.value;
+    });
+    descCell.appendChild(descInput);
+
+    const multiplierCell = document.createElement("td");
+    const multiplierInput = document.createElement("input");
+    multiplierInput.type = "number";
+    multiplierInput.step = "0.1";
+    multiplierInput.min = "1.1";
+    multiplierInput.max = "99";
+    multiplierInput.value = String(definition.multiplier);
+    multiplierInput.addEventListener("input", () => {
+      definition.multiplier = Number(multiplierInput.value || 2);
+    });
+    multiplierCell.appendChild(multiplierInput);
+
+    const optionACell = document.createElement("td");
+    const optionAInput = document.createElement("input");
+    optionAInput.value = definition.optionA;
+    optionAInput.maxLength = 28;
+    optionAInput.addEventListener("input", () => {
+      definition.optionA = optionAInput.value;
+    });
+    optionACell.appendChild(optionAInput);
+
+    const optionBCell = document.createElement("td");
+    const optionBInput = document.createElement("input");
+    optionBInput.value = definition.optionB;
+    optionBInput.maxLength = 28;
+    optionBInput.addEventListener("input", () => {
+      definition.optionB = optionBInput.value;
+    });
+    optionBCell.appendChild(optionBInput);
+
+    const ruleCell = document.createElement("td");
+    const ruleSelect = document.createElement("select");
+    ADVANCED_BET_RULES.forEach((rule) => {
+      const option = document.createElement("option");
+      option.value = rule.value;
+      option.textContent = rule.label;
+      if (rule.value === definition.rule) option.selected = true;
+      ruleSelect.appendChild(option);
+    });
+    ruleSelect.addEventListener("change", () => {
+      definition.rule = ruleSelect.value;
+    });
+    ruleCell.appendChild(ruleSelect);
+
+    const targetCell = document.createElement("td");
+    const targetInput = document.createElement("input");
+    targetInput.value = definition.target;
+    targetInput.placeholder = "Objetivo";
+    targetInput.maxLength = 24;
+    targetInput.addEventListener("input", () => {
+      definition.target = targetInput.value;
+    });
+    targetCell.appendChild(targetInput);
+
+    const actionCell = document.createElement("td");
+    const deleteButton = document.createElement("button");
+    deleteButton.type = "button";
+    deleteButton.className = "danger-button";
+    deleteButton.textContent = "Borrar";
+    deleteButton.addEventListener("click", () => {
+      adminBetDefinitionsDraft.splice(index, 1);
+      renderAdminBetDefinitionsEditor();
+    });
+    actionCell.appendChild(deleteButton);
+
+    row.append(activeCell, labelCell, descCell, multiplierCell, optionACell, optionBCell, ruleCell, targetCell, actionCell);
+    adminBetsBodyElement.appendChild(row);
+  });
+}
+
+async function loadAdvancedBetDefinitionsFromWorker() {
+  try {
+    const body = await postWorkerJson("/bets/config", {});
+    if (Array.isArray(body?.definitions) && body.definitions.length) {
+      advancedBetDefinitions = body.definitions.map(normalizeAdvancedBetDefinition);
+      refreshAdvancedBetDraftAgainstDefinitions();
+      updateAdvancedModeUI();
+    }
+  } catch (error) {
+    console.warn("No pude cargar la configuracion de apuestas:", error);
+  }
+}
+
+async function saveAdminBetDefinitions() {
+  const payload = adminBetDefinitionsDraft.map((definition, index) => normalizeAdvancedBetDefinition({
+    ...definition,
+    id: definition.id || slugifyBetId(definition.label || `bet-${index + 1}`),
+  }, index));
+  const body = await postWorkerJson("/admin/bets/save", { definitions: payload });
+  advancedBetDefinitions = body.definitions.map(normalizeAdvancedBetDefinition);
+  refreshAdvancedBetDraftAgainstDefinitions();
+  adminOverview = {
+    ...(adminOverview || {}),
+    betDefinitions: cloneAdvancedBetDefinitions(advancedBetDefinitions),
+  };
+  setStatus("Configuracion de apuestas guardada.");
+  updateAdvancedModeUI();
+  renderAdminOverview();
 }
 
 function setAdminPanelOpen(nextOpen) {
@@ -3715,6 +4060,7 @@ function scheduleDemoMove() {
 function startAttractMode() {
   stopHoleMode({ keepStatus: true });
   setAdminPanelOpen(false);
+  setLedgerPanelOpen(false);
   attractDismissed = false;
   awaitingManualStart = false;
   advancedBetsVisible = false;
@@ -3728,6 +4074,7 @@ function startAttractMode() {
 function enterManualStartMode() {
   awaitingManualStart = true;
   setAdminPanelOpen(false);
+  setLedgerPanelOpen(false);
   demoMode = false;
   advancedBetsVisible = advancedMode;
   advancedBetsCollapsed = false;
@@ -3787,6 +4134,7 @@ async function prepareAdvancedRoundForNewGame() {
   }
 
   await syncAdvancedCredits(advancedCredits - nextRound.totalStake);
+  await recordAdvancedWager(nextRound);
   return nextRound;
 }
 
@@ -4516,6 +4864,25 @@ showStatsButton?.addEventListener("click", () => {
 closeStatsButton?.addEventListener("click", () => setStatsPanelOpen(false));
 closeAdminButton?.addEventListener("click", () => setAdminPanelOpen(false));
 refreshAdminButton?.addEventListener("click", () => { void loadAdminOverview(true); });
+creditsElement?.addEventListener("click", () => { void loadLedger(); setLedgerPanelOpen(true); });
+creditsElement?.addEventListener("keydown", (event) => {
+  if (event.key === "Enter" || event.key === " ") {
+    event.preventDefault();
+    void loadLedger();
+    setLedgerPanelOpen(true);
+  }
+});
+closeLedgerButton?.addEventListener("click", () => setLedgerPanelOpen(false));
+refreshLedgerButton?.addEventListener("click", () => { void loadLedger(true); });
+adminAddBetButton?.addEventListener("click", () => {
+  adminBetDefinitionsDraft.push(createEmptyAdminBetDefinition());
+  renderAdminBetDefinitionsEditor();
+});
+adminSaveBetsButton?.addEventListener("click", () => {
+  void saveAdminBetDefinitions().catch((error) => {
+    setStatus(`No pude guardar las apuestas: ${error.message}`);
+  });
+});
 closeUndoButton.addEventListener("click", () => setUndoPanelOpen(false));
 closeSaveSlotsButton.addEventListener("click", () => setSaveSlotsPanelOpen(false));
 startAttractButton.addEventListener("click", startActualGame);
@@ -4614,6 +4981,7 @@ renderAdminOverview();
 updateAdvancedModeUI();
 updateManualStartUI();
 updatePauseButton();
+void loadAdvancedBetDefinitionsFromWorker();
 setRecordsPanelOpen(false);
 closeInitialsEntry();
 renderSaveSlots();

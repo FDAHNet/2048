@@ -394,6 +394,7 @@ h1 {
   color: #ffe58f;
   text-shadow: 0 0 12px rgba(255, 214, 98, 0.18);
   min-height: 1.62em;
+  cursor: pointer;
 }
 
 .credits-card {
@@ -2313,7 +2314,8 @@ button:hover {
 .admin-panel-header,
 .admin-panel-actions,
 .admin-columns,
-.admin-card-head {
+.admin-card-head,
+.admin-bets-editor-actions {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -2471,6 +2473,50 @@ button:hover {
 .admin-table-empty {
   text-align: center;
   color: var(--muted);
+}
+
+.admin-bets-editor-actions {
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.admin-bets-table {
+  min-width: 1180px;
+}
+
+.admin-bets-table input,
+.admin-bets-table select {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 10px;
+  padding: 8px 10px;
+  font: inherit;
+  color: var(--text);
+  background: rgba(0,0,0,0.18);
+}
+
+.admin-bets-table td:last-child button {
+  min-width: 0;
+  padding: 7px 10px;
+}
+
+.ledger-panel-shell {
+  max-width: 1040px;
+}
+
+.ledger-table {
+  min-width: 760px;
+}
+
+.ledger-positive {
+  color: #9bffba;
+  font-weight: 700;
+}
+
+.ledger-negative {
+  color: #ff9f9f;
+  font-weight: 700;
 }
 
 .hidden {

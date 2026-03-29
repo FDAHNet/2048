@@ -2,6 +2,7 @@ const GITHUB_OWNER = 'FDAHNet';
 const GITHUB_REPO = '2048';
 const GITHUB_LABEL = 'record';
 const PLAYER_LABEL = 'player-account';
+const BET_CONFIG_LABEL = 'bet-config';
 const DEFAULT_ALLOWED_ORIGIN = 'https://fdahnet.github.io';
 const DEFAULT_ALLOWED_REFERER_PREFIX = 'https://fdahnet.github.io';
 const ALLOWED_MODES = new Set(['4x4', '5x5', '6x6', '8x8']);
@@ -16,6 +17,42 @@ const MAX_REPLAY_TURNS = 600_000;
 const DEFAULT_PLAYER_CREDITS = 100;
 const MAX_CREDITS = 1_000_000;
 const MAX_ADMIN_PAGES = 20;
+const ALLOWED_BET_RULES = new Set(['reasonUser', 'highestTileGte', 'durationMinutesGte', 'scoreGte', 'movesGte', 'holeUsed']);
+const DEFAULT_ADVANCED_BET_DEFINITIONS = [
+  {
+    id: 'endReason',
+    label: 'Final de partida',
+    description: 'Adivina si termina por tu boton o por la maquina.',
+    multiplier: 2.1,
+    optionA: 'BY USER',
+    optionB: 'BY MACHINE',
+    rule: 'reasonUser',
+    target: '',
+    active: true,
+  },
+  {
+    id: 'maxTile256',
+    label: 'Ficha 256',
+    description: 'Apuesta si la partida llega a una ficha 256 o mayor.',
+    multiplier: 2.1,
+    optionA: '256 o mas',
+    optionB: 'Menos de 256',
+    rule: 'highestTileGte',
+    target: '256',
+    active: true,
+  },
+  {
+    id: 'duration5',
+    label: 'Partida larga',
+    description: 'Predice si la partida dura cinco minutos o mas.',
+    multiplier: 2.4,
+    optionA: '05:00 o mas',
+    optionB: 'Menos de 05:00',
+    rule: 'durationMinutesGte',
+    target: '5',
+    active: true,
+  },
+];
 
 export default {
   async fetch(request, env) {
@@ -54,7 +91,7 @@ export default {
     }
 
     if (!rawBody) {
-      return json({ error: 'Payload is required' }, 400, corsHeaders);
+      rawBody = '{}';
     }
 
     if (new TextEncoder().encode(rawBody).length > MAX_REQUEST_BYTES) {
@@ -69,26 +106,17 @@ export default {
     }
 
     try {
-      if (url.pathname === '/player/access') {
-        return await handlePlayerAccess(payload, env, corsHeaders);
-      }
-
-      if (url.pathname === '/player/credits') {
-        return await handlePlayerCredits(payload, env, corsHeaders);
-      }
-
-      if (url.pathname === '/player/session') {
-        return await handlePlayerSession(payload, env, corsHeaders);
-      }
-
-      if (url.pathname === '/admin/overview') {
-        return await handleAdminOverview(env, corsHeaders);
-      }
+      if (url.pathname === '/player/access') return await handlePlayerAccess(payload, env, corsHeaders);
+      if (url.pathname === '/player/credits') return await handlePlayerCredits(payload, env, corsHeaders);
+      if (url.pathname === '/player/wager') return await handlePlayerWager(payload, env, corsHeaders);
+      if (url.pathname === '/player/session') return await handlePlayerSession(payload, env, corsHeaders);
+      if (url.pathname === '/player/ledger') return await handlePlayerLedger(payload, env, corsHeaders);
+      if (url.pathname === '/bets/config') return await handleBetsConfig(env, corsHeaders);
+      if (url.pathname === '/admin/bets/save') return await handleAdminBetsSave(payload, env, corsHeaders);
+      if (url.pathname === '/admin/overview') return await handleAdminOverview(env, corsHeaders);
 
       const validation = validatePayload(payload);
-      if (validation) {
-        return json({ error: validation }, 400, corsHeaders);
-      }
+      if (validation) return json({ error: validation }, 400, corsHeaders);
 
       const title = `[Record] ${payload.initials} - ${payload.score} - ${payload.mode} - ${payload.category.toUpperCase()}`;
       const replayJson = JSON.stringify(payload.replay);
@@ -102,18 +130,7 @@ export default {
         `Date: ${payload.isoDate}`,
       ];
 
-      const inlineBody = [
-        ...baseLines,
-        '',
-        'Replay Storage: inline',
-        'Replay Parts: 1',
-        '',
-        'Replay JSON:',
-        '```json',
-        replayJson,
-        '```',
-      ].join('\n');
-
+      const inlineBody = [...baseLines, '', 'Replay Storage: inline', 'Replay Parts: 1', '', 'Replay JSON:', '```json', replayJson, '```'].join('\n');
       let issue;
 
       if (inlineBody.length <= MAX_ISSUE_BODY) {
@@ -123,25 +140,10 @@ export default {
         if (chunks.length > MAX_REPLAY_PARTS) {
           return json({ error: 'Replay too large to store safely' }, 413, corsHeaders);
         }
-
-        const issueBody = [
-          ...baseLines,
-          '',
-          'Replay Storage: comments',
-          `Replay Parts: ${chunks.length}`,
-          '',
-          'Replay JSON is stored across issue comments.',
-        ].join('\n');
-
+        const issueBody = [...baseLines, '', 'Replay Storage: comments', `Replay Parts: ${chunks.length}`, '', 'Replay JSON is stored across issue comments.'].join('\n');
         issue = await createIssue(env, title, issueBody, [GITHUB_LABEL]);
-
         for (let index = 0; index < chunks.length; index += 1) {
-          const commentBody = [
-            `Replay Part ${index + 1}/${chunks.length}`,
-            '```json',
-            chunks[index],
-            '```',
-          ].join('\n');
+          const commentBody = [`Replay Part ${index + 1}/${chunks.length}`, '```json', chunks[index], '```'].join('\n');
           await createIssueComment(env, issue.number, commentBody);
         }
       }
@@ -158,9 +160,7 @@ function isAllowedOrigin(origin, allowedOrigin) {
 }
 
 function isAllowedBrowserRequest(origin, referer, allowedOrigin, allowedRefererPrefix) {
-  return isAllowedOrigin(origin, allowedOrigin)
-    && typeof referer === 'string'
-    && referer.startsWith(allowedRefererPrefix);
+  return isAllowedOrigin(origin, allowedOrigin) && typeof referer === 'string' && referer.startsWith(allowedRefererPrefix);
 }
 
 function getCorsHeaders(origin, allowedOrigin) {
@@ -169,7 +169,7 @@ function getCorsHeaders(origin, allowedOrigin) {
     'Access-Control-Allow-Origin': allowOrigin,
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type',
-    'Vary': 'Origin',
+    Vary: 'Origin',
   };
 }
 
@@ -178,23 +178,18 @@ function validatePayload(payload) {
   if (!/^[A-Z?]{3}$/.test(payload.initials || '')) return 'Initials must be 3 letters';
   if (!ALLOWED_MODES.has(payload.mode || '')) return 'Mode is invalid';
   if (!ALLOWED_CATEGORIES.has(payload.category || '')) return 'Category is invalid';
-
   const score = Number(payload.score);
   if (!Number.isFinite(score) || score <= 0 || score > MAX_SCORE) return 'Score is invalid';
-
   if (!payload.isoDate || Number.isNaN(Date.parse(payload.isoDate))) return 'Date is required';
   if (!payload.replay || typeof payload.replay !== 'object') return 'Replay is required';
-
   return validateReplay(payload.replay, payload.mode);
 }
 
 function validateReplay(replay, mode) {
   if (!ALLOWED_REPLAY_VERSIONS.has(Number(replay.version || 1))) return 'Replay version is invalid';
-
   const boardSize = Number(replay.boardSize);
   if (!Number.isInteger(boardSize) || boardSize < 4 || boardSize > 8) return 'Replay board size is invalid';
   if (`${boardSize}x${boardSize}` !== mode) return 'Replay mode mismatch';
-
   if (!Array.isArray(replay.start) || replay.start.length > boardSize * boardSize) return 'Replay start is invalid';
   if (!Array.isArray(replay.turns) || replay.turns.length > MAX_REPLAY_TURNS) return 'Replay turns are invalid';
 
@@ -254,11 +249,59 @@ function validateSessionPayload(payload) {
   return '';
 }
 
+function validateWagerPayload(payload) {
+  const validation = validatePlayerAccessPayload(payload);
+  if (validation) return validation;
+  if (!ALLOWED_MODES.has(payload.mode || '')) return 'Mode is invalid';
+  if (!ALLOWED_CATEGORIES.has(payload.category || '')) return 'Category is invalid';
+  if (!Number.isFinite(Number(payload.totalStake)) || Number(payload.totalStake) < 0 || Number(payload.totalStake) > MAX_CREDITS) {
+    return 'Stake is invalid';
+  }
+  if (!Number.isFinite(Number(payload.creditsAfter)) || Number(payload.creditsAfter) < 0 || Number(payload.creditsAfter) > MAX_CREDITS) {
+    return 'Credits are invalid';
+  }
+  if (!Array.isArray(payload.wagers) || !payload.wagers.length || payload.wagers.length > 24) {
+    return 'Wagers are invalid';
+  }
+  for (const wager of payload.wagers) {
+    if (!wager || typeof wager !== 'object') return 'Wagers are invalid';
+    if (!(String(wager.label || '').trim())) return 'Wagers are invalid';
+    if (!(String(wager.predictionLabel || '').trim())) return 'Wagers are invalid';
+    if (!Number.isFinite(Number(wager.stake)) || Number(wager.stake) < 0 || Number(wager.stake) > MAX_CREDITS) {
+      return 'Wagers are invalid';
+    }
+  }
+  return '';
+}
+
+function validateBetDefinitionsPayload(payload) {
+  if (!payload || typeof payload !== 'object' || !Array.isArray(payload.definitions)) return 'Definitions are required';
+  if (!payload.definitions.length) return 'At least one bet definition is required';
+  if (payload.definitions.length > 24) return 'Too many bet definitions';
+  for (const definition of payload.definitions) {
+    const error = validateBetDefinition(definition);
+    if (error) return error;
+  }
+  return '';
+}
+
+function validateBetDefinition(definition) {
+  if (!definition || typeof definition !== 'object') return 'Bet definition is invalid';
+  if (!/^[a-z0-9-]{3,48}$/i.test(definition.id || '')) return 'Bet id is invalid';
+  if (!(definition.label || '').trim()) return 'Bet label is required';
+  if (!(definition.description || '').trim()) return 'Bet description is required';
+  const multiplier = Number(definition.multiplier);
+  if (!Number.isFinite(multiplier) || multiplier < 1.1 || multiplier > 99) return 'Bet multiplier is invalid';
+  if (!(definition.optionA || '').trim() || !(definition.optionB || '').trim()) return 'Both options are required';
+  if (!ALLOWED_BET_RULES.has(definition.rule || '')) return 'Bet rule is invalid';
+  if (typeof definition.active !== 'boolean') return 'Bet active flag is invalid';
+  return '';
+}
+
 async function handlePlayerAccess(payload, env, corsHeaders) {
   const validation = validatePlayerAccessPayload(payload);
   if (validation) return json({ error: validation }, 400, corsHeaders);
   const alias = String(payload.alias).toUpperCase();
-
   const issue = await findPlayerIssueByAlias(env, alias);
   if (!issue) {
     const createdAt = new Date().toISOString();
@@ -266,12 +309,10 @@ async function handlePlayerAccess(payload, env, corsHeaders) {
     const created = await createIssue(env, `[Player] ${alias}`, buildPlayerIssueBody(player), [PLAYER_LABEL]);
     return json({ ok: true, created: true, alias, credits: DEFAULT_PLAYER_CREDITS, issueNumber: created.number }, 200, corsHeaders);
   }
-
   const parsed = parsePlayerIssue(issue);
   if (!parsed || parsed.pinHash.toLowerCase() !== payload.pinHash.toLowerCase()) {
     return json({ error: 'Alias o PIN incorrecto' }, 403, corsHeaders);
   }
-
   return json({ ok: true, created: false, alias: parsed.alias, credits: parsed.credits, issueNumber: issue.number }, 200, corsHeaders);
 }
 
@@ -279,21 +320,14 @@ async function handlePlayerCredits(payload, env, corsHeaders) {
   const validation = validateCreditsPayload(payload);
   if (validation) return json({ error: validation }, 400, corsHeaders);
   const alias = String(payload.alias).toUpperCase();
-
   const issue = await findPlayerIssueByAlias(env, alias);
   if (!issue) return json({ error: 'Jugador no encontrado' }, 404, corsHeaders);
-
   const parsed = parsePlayerIssue(issue);
   if (!parsed || parsed.pinHash.toLowerCase() !== payload.pinHash.toLowerCase()) {
     return json({ error: 'Alias o PIN incorrecto' }, 403, corsHeaders);
   }
-
   const credits = clampInt(payload.credits, 0, MAX_CREDITS);
-  const updated = {
-    ...parsed,
-    credits,
-    updatedAt: new Date().toISOString(),
-  };
+  const updated = { ...parsed, credits, updatedAt: new Date().toISOString() };
   await updateIssue(env, issue.number, { body: buildPlayerIssueBody(updated) });
   return json({ ok: true, alias: parsed.alias, credits }, 200, corsHeaders);
 }
@@ -302,10 +336,8 @@ async function handlePlayerSession(payload, env, corsHeaders) {
   const validation = validateSessionPayload(payload);
   if (validation) return json({ error: validation }, 400, corsHeaders);
   const alias = String(payload.alias).toUpperCase();
-
   const issue = await findPlayerIssueByAlias(env, alias);
   if (!issue) return json({ error: 'Jugador no encontrado' }, 404, corsHeaders);
-
   const parsed = parsePlayerIssue(issue);
   if (!parsed || parsed.pinHash.toLowerCase() !== payload.pinHash.toLowerCase()) {
     return json({ error: 'Alias o PIN incorrecto' }, 403, corsHeaders);
@@ -338,33 +370,108 @@ async function handlePlayerSession(payload, env, corsHeaders) {
   };
 
   await updateIssue(env, issue.number, { body: buildPlayerIssueBody(next) });
+  await createIssueComment(
+    env,
+    issue.number,
+    buildLedgerComment({
+      date: now,
+      kind: voided ? 'void' : payout > 0 ? 'win' : 'loss',
+      amount: voided ? totalStake : payout,
+      balanceAfter: next.credits,
+      detail: buildSessionLedgerDetail(payload, { wonCount, payout, totalStake, voided }),
+    })
+  );
   return json({ ok: true, alias: next.alias, gamesPlayed: next.gamesPlayed }, 200, corsHeaders);
 }
 
-async function handleAdminOverview(env, corsHeaders) {
-  const players = (await listIssuesByLabel(env, PLAYER_LABEL, MAX_ADMIN_PAGES))
-    .map(parsePlayerIssue)
-    .filter(Boolean)
-    .sort((a, b) => (b.credits - a.credits) || (b.bestScore - a.bestScore) || a.alias.localeCompare(b.alias));
+async function handlePlayerWager(payload, env, corsHeaders) {
+  const validation = validateWagerPayload(payload);
+  if (validation) return json({ error: validation }, 400, corsHeaders);
+  const alias = String(payload.alias).toUpperCase();
+  const issue = await findPlayerIssueByAlias(env, alias);
+  if (!issue) return json({ error: 'Jugador no encontrado' }, 404, corsHeaders);
+  const parsed = parsePlayerIssue(issue);
+  if (!parsed || parsed.pinHash.toLowerCase() !== payload.pinHash.toLowerCase()) {
+    return json({ error: 'Alias o PIN incorrecto' }, 403, corsHeaders);
+  }
 
-  const recordIssues = await listIssuesByLabel(env, GITHUB_LABEL, MAX_ADMIN_PAGES);
+  const now = new Date().toISOString();
+  const totalStake = clampInt(payload.totalStake, 0, MAX_CREDITS);
+  const creditsAfter = clampInt(payload.creditsAfter, 0, MAX_CREDITS);
+  await createIssueComment(
+    env,
+    issue.number,
+    buildLedgerComment({
+      date: now,
+      kind: 'wager',
+      amount: -totalStake,
+      balanceAfter: creditsAfter,
+      detail: buildWagerLedgerDetail(payload),
+    })
+  );
+
+  return json({ ok: true, alias: parsed.alias }, 200, corsHeaders);
+}
+
+async function handlePlayerLedger(payload, env, corsHeaders) {
+  const validation = validatePlayerAccessPayload(payload);
+  if (validation) return json({ error: validation }, 400, corsHeaders);
+  const alias = String(payload.alias).toUpperCase();
+  const issue = await findPlayerIssueByAlias(env, alias);
+  if (!issue) return json({ error: 'Jugador no encontrado' }, 404, corsHeaders);
+  const parsed = parsePlayerIssue(issue);
+  if (!parsed || parsed.pinHash.toLowerCase() !== payload.pinHash.toLowerCase()) {
+    return json({ error: 'Alias o PIN incorrecto' }, 403, corsHeaders);
+  }
+
+  const comments = await listIssueComments(env, issue.number);
+  const entries = comments
+    .map(parseLedgerComment)
+    .filter(Boolean)
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+  return json({
+    ok: true,
+    alias: parsed.alias,
+    credits: parsed.credits,
+    totalWagered: parsed.totalWagered,
+    totalPayout: parsed.totalPayout,
+    gamesPlayed: parsed.gamesPlayed,
+    bestScore: parsed.bestScore,
+    entries,
+  }, 200, corsHeaders);
+}
+
+async function handleBetsConfig(env, corsHeaders) {
+  const definitions = await getBetDefinitions(env);
+  return json({ ok: true, definitions }, 200, corsHeaders);
+}
+
+async function handleAdminBetsSave(payload, env, corsHeaders) {
+  const validation = validateBetDefinitionsPayload(payload);
+  if (validation) return json({ error: validation }, 400, corsHeaders);
+  const definitions = payload.definitions.map((definition, index) => normalizeBetDefinition(definition, index));
+  await saveBetDefinitions(env, definitions);
+  return json({ ok: true, definitions }, 200, corsHeaders);
+}
+
+async function handleAdminOverview(env, corsHeaders) {
+  const [players, recordIssues, betDefinitions] = await Promise.all([
+    listIssuesByLabel(env, PLAYER_LABEL, MAX_ADMIN_PAGES),
+    listIssuesByLabel(env, GITHUB_LABEL, MAX_ADMIN_PAGES),
+    getBetDefinitions(env),
+  ]);
+
+  const parsedPlayers = players.map(parsePlayerIssue).filter(Boolean).sort((a, b) => (b.credits - a.credits) || (b.bestScore - a.bestScore) || a.alias.localeCompare(b.alias));
   const records = recordIssues.map(parseRecordIssue).filter(Boolean);
   const generatedAt = new Date().toISOString();
-
-  const totalCredits = players.reduce((sum, player) => sum + player.credits, 0);
-  const totalGamesPlayed = players.reduce((sum, player) => sum + player.gamesPlayed, 0);
-  const totalWagered = players.reduce((sum, player) => sum + player.totalWagered, 0);
-  const totalPayout = players.reduce((sum, player) => sum + player.totalPayout, 0);
+  const totalCredits = parsedPlayers.reduce((sum, player) => sum + player.credits, 0);
+  const totalGamesPlayed = parsedPlayers.reduce((sum, player) => sum + player.gamesPlayed, 0);
+  const totalWagered = parsedPlayers.reduce((sum, player) => sum + player.totalWagered, 0);
+  const totalPayout = parsedPlayers.reduce((sum, player) => sum + player.totalPayout, 0);
 
   const recordsByMode = Object.fromEntries(
-    Array.from(ALLOWED_MODES).map((mode) => [
-      mode,
-      Object.fromEntries(Array.from(ALLOWED_CATEGORIES).map((category) => [category, {
-        count: 0,
-        bestScore: 0,
-        bestInitials: '---',
-      }]))
-    ])
+    Array.from(ALLOWED_MODES).map((mode) => [mode, Object.fromEntries(Array.from(ALLOWED_CATEGORIES).map((category) => [category, { count: 0, bestScore: 0, bestInitials: '---' }]))])
   );
 
   for (const record of records) {
@@ -381,14 +488,14 @@ async function handleAdminOverview(env, corsHeaders) {
     ok: true,
     summary: {
       generatedAt,
-      totalUsers: players.length,
+      totalUsers: parsedPlayers.length,
       totalCredits,
-      averageCredits: players.length ? Math.round(totalCredits / players.length) : 0,
+      averageCredits: parsedPlayers.length ? Math.round(totalCredits / parsedPlayers.length) : 0,
       totalGamesPlayed,
       totalWagered,
       totalPayout,
     },
-    players: players.map((player) => ({
+    players: parsedPlayers.map((player) => ({
       alias: player.alias,
       credits: player.credits,
       gamesPlayed: player.gamesPlayed,
@@ -410,7 +517,24 @@ async function handleAdminOverview(env, corsHeaders) {
       updatedAt: player.updatedAt,
     })),
     recordsByMode,
+    betDefinitions,
   }, 200, corsHeaders);
+}
+
+async function getBetDefinitions(env) {
+  const issue = await findBetConfigIssue(env);
+  if (!issue) return DEFAULT_ADVANCED_BET_DEFINITIONS.map((definition, index) => normalizeBetDefinition(definition, index));
+  return parseBetConfigIssue(issue);
+}
+
+async function saveBetDefinitions(env, definitions) {
+  const issue = await findBetConfigIssue(env);
+  const body = buildBetConfigIssueBody(definitions);
+  if (!issue) {
+    await createIssue(env, '[Config] Advanced Bets', body, [BET_CONFIG_LABEL]);
+    return;
+  }
+  await updateIssue(env, issue.number, { body });
 }
 
 async function findPlayerIssueByAlias(env, alias) {
@@ -419,12 +543,17 @@ async function findPlayerIssueByAlias(env, alias) {
   return issues.find((item) => !item.pull_request && item.title === `[Player] ${normalizedAlias}`) || null;
 }
 
+async function findBetConfigIssue(env) {
+  const issues = await listIssuesByLabel(env, BET_CONFIG_LABEL, MAX_ADMIN_PAGES);
+  return issues.find((item) => !item.pull_request && item.title === '[Config] Advanced Bets') || null;
+}
+
 async function listIssuesByLabel(env, label, maxPages = 10) {
   const issues = [];
   for (let page = 1; page <= maxPages; page += 1) {
     const response = await githubRequest(env, `/repos/${GITHUB_OWNER}/${GITHUB_REPO}/issues?state=all&labels=${label}&per_page=100&page=${page}`, {
       method: 'GET',
-      headers: { 'Accept': 'application/vnd.github+json' },
+      headers: { Accept: 'application/vnd.github+json' },
     });
     const batch = await response.json();
     issues.push(...batch.filter((item) => !item.pull_request));
@@ -517,14 +646,97 @@ function parsePlayerIssue(issue) {
   };
 }
 
+function buildWagerLedgerDetail(payload) {
+  const parts = (payload.wagers || []).map((wager) => {
+    const stake = clampInt(wager.stake, 0, MAX_CREDITS);
+    return `${String(wager.label || '').trim()}: ${String(wager.predictionLabel || '').trim()} (${stake})`;
+  });
+  return `Apuesta ${payload.mode} · ${String(payload.category || 'normal').toUpperCase()} · ${parts.join(' | ')}`.slice(0, 800);
+}
+
+function buildSessionLedgerDetail(payload, settlement) {
+  const reasonLabel = payload.reason === 'BY USER' ? 'BY USER' : 'BY MACHINE';
+  if (settlement.voided) {
+    return `Partida anulada · ${payload.mode} · ${String(payload.category || 'normal').toUpperCase()} · ${reasonLabel} · apuesta devuelta ${settlement.totalStake}`.slice(0, 800);
+  }
+  if (settlement.payout > 0) {
+    return `Partida ganada · ${payload.mode} · ${String(payload.category || 'normal').toUpperCase()} · ${reasonLabel} · premio ${settlement.payout} · aciertos ${settlement.wonCount}`.slice(0, 800);
+  }
+  return `Partida perdida · ${payload.mode} · ${String(payload.category || 'normal').toUpperCase()} · ${reasonLabel} · sin premio`.slice(0, 800);
+}
+
+function buildLedgerComment(entry) {
+  return [
+    '[Ledger]',
+    `Date: ${entry.date}`,
+    `Kind: ${entry.kind}`,
+    `Amount: ${Math.trunc(Number(entry.amount) || 0)}`,
+    `BalanceAfter: ${clampInt(entry.balanceAfter, 0, MAX_CREDITS)}`,
+    `Detail: ${String(entry.detail || '').replace(/\r?\n/g, ' ').trim()}`,
+  ].join('\n');
+}
+
+function parseLedgerComment(comment) {
+  const body = comment?.body || '';
+  if (!body.startsWith('[Ledger]')) return null;
+  const date = body.match(/Date:\s*([^\n]+)/i)?.[1]?.trim();
+  const kind = body.match(/Kind:\s*([a-z]+)/i)?.[1]?.trim();
+  const amount = Number(body.match(/Amount:\s*(-?[0-9]+)/i)?.[1] || 0);
+  const balanceAfter = Number(body.match(/BalanceAfter:\s*([0-9]+)/i)?.[1] || 0);
+  const detail = body.match(/Detail:\s*([^\n]+)/i)?.[1]?.trim() || '';
+  if (!date || !kind) return null;
+  return {
+    date,
+    type: kind.toUpperCase(),
+    amount,
+    balanceAfter,
+    detail,
+  };
+}
+
+function buildBetConfigIssueBody(definitions) {
+  return [
+    'Advanced bets global config',
+    '',
+    '```json',
+    JSON.stringify(definitions, null, 2),
+    '```',
+  ].join('\n');
+}
+
+function parseBetConfigIssue(issue) {
+  const body = issue.body || '';
+  const jsonBlock = body.match(/```json\s*([\s\S]*?)```/i)?.[1];
+  if (!jsonBlock) return DEFAULT_ADVANCED_BET_DEFINITIONS.map((definition, index) => normalizeBetDefinition(definition, index));
+  try {
+    const parsed = JSON.parse(jsonBlock);
+    if (!Array.isArray(parsed) || !parsed.length) {
+      return DEFAULT_ADVANCED_BET_DEFINITIONS.map((definition, index) => normalizeBetDefinition(definition, index));
+    }
+    return parsed.map((definition, index) => normalizeBetDefinition(definition, index));
+  } catch {
+    return DEFAULT_ADVANCED_BET_DEFINITIONS.map((definition, index) => normalizeBetDefinition(definition, index));
+  }
+}
+
+function normalizeBetDefinition(definition, index) {
+  return {
+    id: String(definition?.id || `bet-${index + 1}`).toLowerCase().replace(/[^a-z0-9-]/g, '-').slice(0, 48),
+    label: String(definition?.label || `Apuesta ${index + 1}`).slice(0, 36),
+    description: String(definition?.description || 'Sin explicacion.').slice(0, 120),
+    multiplier: Math.max(1.1, Math.min(99, Number(definition?.multiplier || 2))),
+    optionA: String(definition?.optionA || 'Opcion 1').slice(0, 28),
+    optionB: String(definition?.optionB || 'Opcion 2').slice(0, 28),
+    rule: ALLOWED_BET_RULES.has(definition?.rule) ? definition.rule : 'reasonUser',
+    target: String(definition?.target ?? '').slice(0, 24),
+    active: Boolean(definition?.active),
+  };
+}
+
 function parseRecordIssue(issue) {
   const body = issue.body || '';
-  const initials = body.match(/Initials:\s*([A-Z?]{3})/i)?.[1]
-    || issue.title.match(/^\[Record\]\s+([A-Z?]{3})/i)?.[1]
-    || '---';
-  const mode = body.match(/Mode:\s*(\dx\d)/i)?.[1]
-    || issue.title.match(/-\s*(\dx\d)\b/i)?.[1]
-    || '4x4';
+  const initials = body.match(/Initials:\s*([A-Z?]{3})/i)?.[1] || issue.title.match(/^\[Record\]\s+([A-Z?]{3})/i)?.[1] || '---';
+  const mode = body.match(/Mode:\s*(\dx\d)/i)?.[1] || issue.title.match(/-\s*(\dx\d)\b/i)?.[1] || '4x4';
   const category = body.match(/Category:\s*(normal|hole)/i)?.[1]?.toLowerCase() || 'normal';
   const score = Number(body.match(/Score:\s*([0-9]+)/i)?.[1] || issue.title.match(/-\s*([0-9]+)\s*-/)?.[1] || 0);
   if (!ALLOWED_MODES.has(mode) || !ALLOWED_CATEGORIES.has(category) || !Number.isFinite(score)) return null;
@@ -570,13 +782,8 @@ function chunkString(value, chunkSize) {
 async function createIssue(env, title, body, labels) {
   const response = await githubRequest(env, `/repos/${GITHUB_OWNER}/${GITHUB_REPO}/issues`, {
     method: 'POST',
-    body: JSON.stringify({
-      title,
-      body,
-      labels,
-    }),
+    body: JSON.stringify({ title, body, labels }),
   });
-
   return response.json();
 }
 
@@ -585,7 +792,6 @@ async function updateIssue(env, issueNumber, payload) {
     method: 'PATCH',
     body: JSON.stringify(payload),
   });
-
   return response.json();
 }
 
@@ -594,27 +800,38 @@ async function createIssueComment(env, issueNumber, body) {
     method: 'POST',
     body: JSON.stringify({ body }),
   });
-
   return response.json();
+}
+
+async function listIssueComments(env, issueNumber) {
+  const comments = [];
+  for (let page = 1; page <= MAX_ADMIN_PAGES; page += 1) {
+    const response = await githubRequest(env, `/repos/${GITHUB_OWNER}/${GITHUB_REPO}/issues/${issueNumber}/comments?per_page=100&page=${page}`, {
+      method: 'GET',
+      headers: { Accept: 'application/vnd.github+json' },
+    });
+    const batch = await response.json();
+    comments.push(...batch);
+    if (batch.length < 100) break;
+  }
+  return comments;
 }
 
 async function githubRequest(env, path, init) {
   const response = await fetch(`https://api.github.com${path}`, {
     ...init,
     headers: {
-      'Authorization': `Bearer ${env.GITHUB_TOKEN}`,
+      Authorization: `Bearer ${env.GITHUB_TOKEN}`,
       'Content-Type': 'application/json',
       'User-Agent': '2048-angeloso-worker',
-      'Accept': 'application/vnd.github+json',
+      Accept: 'application/vnd.github+json',
       ...(init.headers || {}),
     },
   });
-
   if (!response.ok) {
     const errorText = await response.text();
     throw new Error(errorText);
   }
-
   return response;
 }
 
@@ -627,3 +844,5 @@ function json(data, status, headers) {
     },
   });
 }
+
+
