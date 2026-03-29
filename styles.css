@@ -2530,8 +2530,18 @@ button:hover {
   border-radius: 10px;
   padding: 8px 10px;
   font: inherit;
-  color: var(--text);
-  background: rgba(0,0,0,0.18);
+  color: #fff4dc;
+  background: #2b2336;
+}
+
+.admin-bets-table select {
+  appearance: auto;
+  color-scheme: dark;
+}
+
+.admin-bets-table select option {
+  color: #fff4dc;
+  background: #2b2336;
 }
 
 .admin-bets-table td:last-child button {
