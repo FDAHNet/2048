@@ -3109,6 +3109,16 @@ function isRecordScore(score) {
   return categoryRecords.some((record) => score > record.score);
 }
 
+function shouldOpenInitialsForScore(score) {
+  if (score <= 0) return false;
+  if (isRecordScore(score)) return true;
+
+  const mode = `${boardSize}x${boardSize}`;
+  const category = getCurrentRecordCategory();
+  const globalTopScore = getTopScoreForMode(mode, category);
+  return globalTopScore > 0 && score > globalTopScore;
+}
+
 function renderRecords() {
   return;
 }
@@ -4374,7 +4384,7 @@ function deleteLastLetter() {
 function maybePersistCurrentScore() {
   if (demoMode) return;
   if (recordSaved || gameState.score <= 0) return;
-  if (!isRecordScore(gameState.score)) {
+  if (!shouldOpenInitialsForScore(gameState.score)) {
     recordSaved = true;
     return;
   }
