@@ -385,6 +385,12 @@ function describeAdvancedRound(round = activeAdvancedRound) {
   return round.wagers.map((wager) => `${wager.label}: ${wager.predictionLabel} (${wager.stake})`).join(" · ");
 }
 
+function describeAdvancedDraft() {
+  const pendingRound = buildAdvancedRoundFromDraft();
+  if (!pendingRound?.wagers?.length) return "";
+  return pendingRound.wagers.map((wager) => `${wager.label}: ${wager.predictionLabel} (${wager.stake})`).join(" · ");
+}
+
 function updateAdvancedModeUI() {
   if (advancedModeToggle) advancedModeToggle.checked = advancedMode;
   creditsCardElement?.classList.toggle("hidden", !advancedMode);
@@ -485,6 +491,8 @@ function renderAdvancedBetsPanel() {
     advancedBetsActiveElement.textContent = `Ronda anulada: ${activeAdvancedRound.voidedReason}`;
   } else if (activeAdvancedRound?.wagers?.length && !activeAdvancedRound.settled) {
     advancedBetsActiveElement.textContent = `Apuestas activas: ${describeAdvancedRound(activeAdvancedRound)}`;
+  } else if (advancedBetsCollapsed) {
+    advancedBetsActiveElement.textContent = describeAdvancedDraft() || advancedBetResultMessage || "Sin apuestas preparadas.";
   } else {
     advancedBetsActiveElement.textContent = advancedBetResultMessage || "";
   }
@@ -1590,19 +1598,11 @@ function logoutAdvancedPlayer() {
   setStatus("Sesion avanzada cerrada.");
 }
 
-function closeAdvancedMode() {
-  if (activeAdvancedRound?.wagers?.length && !activeAdvancedRound.settled) {
-    setStatus("No puedes cerrar Modo Avanzado con una ronda activa.");
-    return;
-  }
+function closeAdvancedModePanel() {
   closeAdvancedAuthEntry();
-  advancedMode = false;
   advancedBetsVisible = false;
-  advancedBetsCollapsed = false;
-  if (advancedModeToggle) advancedModeToggle.checked = false;
-  localStorage.setItem(ADVANCED_MODE_KEY, "false");
   updateAdvancedModeUI();
-  setStatus("Modo avanzado cerrado.");
+  setStatus("Panel de Modo Avanzado cerrado.");
 }
 
 function boardValuesFromState(state = gameState) {
@@ -4356,7 +4356,7 @@ advancedAuthXButton?.addEventListener("click", () => {
   }
 });
 advancedBetsCloseButton?.addEventListener("click", () => {
-  closeAdvancedMode();
+  closeAdvancedModePanel();
 });
 advancedBetsCollapseButton?.addEventListener("click", () => {
   advancedBetsCollapsed = !advancedBetsCollapsed;

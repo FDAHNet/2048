@@ -423,6 +423,7 @@ h1 {
   justify-content: space-between;
   gap: 16px;
   overflow: visible;
+  z-index: 12;
 }
 
 .control-actions {
@@ -448,6 +449,12 @@ h1 {
 .advanced-bets-panel.is-collapsed .advanced-bets-list,
 .advanced-bets-panel.is-collapsed .advanced-bets-clear-button {
   display: none;
+}
+
+.advanced-bets-panel.is-collapsed .advanced-bets-footer {
+  display: grid;
+  grid-template-columns: 1fr;
+  justify-items: stretch;
 }
 
 .advanced-bets-panel.is-collapsed .advanced-bets-card {
@@ -542,6 +549,7 @@ h1 {
   align-items: center;
   gap: 10px;
   position: relative;
+  z-index: 70;
   padding: 10px 14px;
   border-radius: 999px;
   background: linear-gradient(180deg, rgba(255, 210, 232, 0.32), rgba(158, 70, 110, 0.22));
@@ -582,7 +590,7 @@ h1 {
   visibility: hidden;
   pointer-events: none;
   transition: opacity 180ms ease, transform 180ms ease, visibility 180ms ease;
-  z-index: 60;
+  z-index: 999;
 }
 
 .advanced-toggle:hover .advanced-toggle-hint,
