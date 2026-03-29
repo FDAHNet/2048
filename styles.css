@@ -996,10 +996,15 @@ button:hover {
 .audio-toggle-button,
 .undo-toggle-button,
 .pause-button,
-.save-game-button {
+.save-game-button,
+.records-toggle-side-button {
   min-width: 150px;
   text-align: center;
   align-self: flex-end;
+}
+
+.records-toggle-side-button {
+  margin-top: 6px;
 }
 
 #finish-button {
