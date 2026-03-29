@@ -272,6 +272,16 @@ function stopHoleMode(options = {}) {
   }
 }
 
+function endGameByMachine() {
+  gameState.over = true;
+  stopHoleMode({ keepStatus: true });
+  render();
+  renderGameTimer();
+  setGameOverOverlay(true, "BY MACHINE");
+  maybePersistCurrentScore();
+  setStatus("No quedan movimientos. Pulsa Nueva partida.");
+}
+
 function updatePauseButton() {
   if (!pauseButton) return;
   pauseButton.textContent = gamePaused ? "SEGUIR" : "PAUSA";
@@ -1380,18 +1390,16 @@ function scheduleHoleMove() {
     if (holeSessionId !== gameSessionId) return;
     if (!holeMode || isAnimating || replayMode || initialsEntryState.active || demoMode) return;
     if (gameState.over) {
-      stopHoleMode({ keepStatus: true });
+      endGameByMachine();
+      return;
+    }
+    if (!canMove()) {
+      endGameByMachine();
       return;
     }
     const direction = getHoleBestMove();
     if (!direction) {
-      gameState.over = true;
-      stopHoleMode({ keepStatus: true });
-      render();
-      renderGameTimer();
-      setGameOverOverlay(true, "BY MACHINE");
-      maybePersistCurrentScore();
-      setStatus("No quedan movimientos. Pulsa Nueva partida.");
+      endGameByMachine();
       return;
     }
     move(direction);
@@ -1853,6 +1861,11 @@ function getDirectionLabel(direction) {
 function applyScoreSizing(element, value) {
   if (!element) return;
   element.classList.remove("is-mid", "is-big", "is-large", "is-huge");
+  element.style.fontSize = "";
+  element.style.letterSpacing = "";
+
+  const digits = String(Math.max(0, Math.trunc(value))).length;
+
   if (value >= 10000000) {
     element.classList.add("is-huge");
   } else if (value >= 1000000) {
@@ -1862,6 +1875,19 @@ function applyScoreSizing(element, value) {
   } else if (value >= 10000) {
     element.classList.add("is-mid");
   }
+
+  if (digits <= 4) return;
+
+  const sizingByDigits = {
+    5: { fontSize: "1.28rem", letterSpacing: "-0.07em" },
+    6: { fontSize: "1.08rem", letterSpacing: "-0.08em" },
+    7: { fontSize: "0.92rem", letterSpacing: "-0.09em" },
+    8: { fontSize: "0.78rem", letterSpacing: "-0.1em" },
+  };
+
+  const resolved = sizingByDigits[Math.min(digits, 8)] || { fontSize: "0.68rem", letterSpacing: "-0.11em" };
+  element.style.fontSize = resolved.fontSize;
+  element.style.letterSpacing = resolved.letterSpacing;
 }
 
 function updateReplayArrow(direction = "") {
@@ -2926,13 +2952,8 @@ function move(direction) {
       gameState.won = true;
       setStatus(demoMode ? "MODO DEMO" : "Llegaste a 2048. Puedes seguir jugando.");
     } else if (!canMove()) {
-      gameState.over = true;
-      stopHoleMode({ keepStatus: true });
-      renderGameTimer();
       if (!demoMode) {
-        setGameOverOverlay(true, "BY MACHINE");
-        maybePersistCurrentScore();
-        setStatus("No quedan movimientos. Pulsa Nueva partida.");
+        endGameByMachine();
       } else {
         setStatus("MODO DEMO");
         startGame({ demo: true });
