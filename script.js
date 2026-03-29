@@ -103,6 +103,7 @@ let demoTimer = null;
 let holeMode = false;
 let holeTimer = null;
 let holeSequenceProgress = 0;
+let holePreferredCorner = null;
 let attractDismissed = false;
 let theme = localStorage.getItem(THEME_KEY) || "crt";
 let gameSessionId = 0;
@@ -256,6 +257,7 @@ function stopHoleMode(options = {}) {
   const { keepStatus = false } = options;
   holeMode = false;
   holeSequenceProgress = 0;
+  holePreferredCorner = null;
   if (holeTimer) {
     window.clearTimeout(holeTimer);
     holeTimer = null;
@@ -996,6 +998,15 @@ function getAdjacentEmptyCount(values, row, col) {
   return count;
 }
 
+function getCornerDefinitions() {
+  return {
+    topLeft: { row: 0, col: 0, vertical: "up", horizontal: "left" },
+    topRight: { row: 0, col: boardSize - 1, vertical: "up", horizontal: "right" },
+    bottomLeft: { row: boardSize - 1, col: 0, vertical: "down", horizontal: "left" },
+    bottomRight: { row: boardSize - 1, col: boardSize - 1, vertical: "down", horizontal: "right" },
+  };
+}
+
 function getBoardSignature(values) {
   return values.map((row) => row.join(",")).join("|");
 }
@@ -1021,6 +1032,23 @@ function scoreSnakeAlignment(values) {
       return total;
     })
   );
+}
+
+function scoreBoardForCorner(values, cornerKey) {
+  const corners = getCornerDefinitions();
+  const corner = corners[cornerKey];
+  if (!corner) return Number.NEGATIVE_INFINITY;
+
+  let total = 0;
+  for (let row = 0; row < boardSize; row += 1) {
+    for (let col = 0; col < boardSize; col += 1) {
+      const value = values[row][col];
+      if (!value) continue;
+      const distance = Math.abs(row - corner.row) + Math.abs(col - corner.col);
+      total += Math.log2(value) * ((boardSize * 2) - distance);
+    }
+  }
+  return total;
 }
 
 function getDominantSnakeWeightMap(values) {
@@ -1094,7 +1122,83 @@ function scoreSmoothness(values) {
   return penalty;
 }
 
-function evaluateBoardValues(values, gainedScore = 0) {
+function determineHolePreferredCorner(values) {
+  const corners = Object.keys(getCornerDefinitions());
+  let bestCorner = corners[0];
+  let bestScore = Number.NEGATIVE_INFINITY;
+
+  corners.forEach((cornerKey) => {
+    const score = scoreSnakeAlignment(values) + (scoreBoardForCorner(values, cornerKey) * 12);
+    if (score > bestScore) {
+      bestScore = score;
+      bestCorner = cornerKey;
+    }
+  });
+
+  return bestCorner;
+}
+
+function scoreCornerDiscipline(values, preferredCorner) {
+  const corner = getCornerDefinitions()[preferredCorner];
+  if (!corner) return 0;
+
+  const maxTile = Math.max(...values.flat());
+  let anchorBonus = 0;
+  if (values[corner.row][corner.col] === maxTile) {
+    anchorBonus += maxTile * 90;
+  } else {
+    anchorBonus -= maxTile * 120;
+  }
+
+  const edgeValues = [];
+  if (corner.vertical === "up") {
+    edgeValues.push(...values[corner.row]);
+  } else {
+    edgeValues.push(...values[corner.row].slice().reverse());
+  }
+
+  const columnValues = [];
+  for (let row = 0; row < boardSize; row += 1) {
+    columnValues.push(values[row][corner.col]);
+  }
+  if (corner.vertical === "down") {
+    columnValues.reverse();
+  }
+
+  let monotonicEdgeBonus = 0;
+  [edgeValues, columnValues].forEach((line) => {
+    for (let index = 0; index < line.length - 1; index += 1) {
+      const current = line[index] || 0;
+      const next = line[index + 1] || 0;
+      if (current >= next) {
+        monotonicEdgeBonus += current ? Math.log2(current + 1) * 45 : 10;
+      } else {
+        monotonicEdgeBonus -= (next - current) * 4;
+      }
+    }
+  });
+
+  return anchorBonus + monotonicEdgeBonus;
+}
+
+function scoreMergeReadiness(values, preferredCorner) {
+  const corner = getCornerDefinitions()[preferredCorner];
+  if (!corner) return 0;
+
+  const axisDirections = [corner.vertical, corner.horizontal];
+  let bonus = 0;
+
+  axisDirections.forEach((direction) => {
+    const simulation = simulateDirectionOnValues(values, direction);
+    if (!simulation.moved) return;
+    bonus += simulation.gainedScore * 18;
+    bonus += simulation.highestMerge * 7;
+  });
+
+  return bonus;
+}
+
+function evaluateBoardValues(values, gainedScore = 0, preferredCorner = holePreferredCorner) {
   const emptyCells = countEmptyCells(values);
   const mobility = countAvailableMovesForValues(values);
   if (mobility === 0) return Number.NEGATIVE_INFINITY;
@@ -1105,6 +1209,9 @@ function evaluateBoardValues(values, gainedScore = 0) {
   const maxTile = Math.max(...values.flat());
   const maxInCorner = [values[0][0], values[0][boardSize - 1], values[boardSize - 1][0], values[boardSize - 1][boardSize - 1]]
     .includes(maxTile);
+  const cornerDiscipline = preferredCorner ? scoreCornerDiscipline(values, preferredCorner) : 0;
+  const mergeReadiness = preferredCorner ? scoreMergeReadiness(values, preferredCorner) : 0;
+  const cornerShaping = preferredCorner ? scoreBoardForCorner(values, preferredCorner) : 0;
 
   return (
     (emptyCells * 10000)
@@ -1113,12 +1220,21 @@ function evaluateBoardValues(values, gainedScore = 0) {
     + (weightedSnake * 1.4)
     + (monotonicity * 180)
     - (smoothnessPenalty * 140)
+    + (cornerShaping * 55)
+    + cornerDiscipline
+    + mergeReadiness
     + (maxInCorner ? maxTile * 24 : 0)
   );
 }
 
 function getHoleSearchDepth(values) {
   const emptyCells = countEmptyCells(values);
+  if (boardSize === 4) {
+    if (emptyCells <= 2) return 6;
+    if (emptyCells <= 5) return 5;
+    if (emptyCells <= 8) return 4;
+    return 3;
+  }
   if (boardSize >= 8) {
     if (emptyCells <= 3) return 3;
     return 2;
@@ -1136,6 +1252,7 @@ function getHoleSearchDepth(values) {
 
 function getRelevantChanceCells(values) {
   const empty = getEmptyPositions(values);
+  if (boardSize === 4) return empty;
   if (empty.length <= 6) return empty;
 
   const weightedSnakeMap = getDominantSnakeWeightMap(values);
@@ -1149,12 +1266,12 @@ function getRelevantChanceCells(values) {
     .slice(0, boardSize >= 6 ? 5 : 6);
 }
 
-function evaluateHoleFuture(values, depth, isChanceNode, cache) {
-  const signature = `${isChanceNode ? "C" : "P"}:${depth}:${getBoardSignature(values)}`;
+function evaluateHoleFuture(values, depth, isChanceNode, cache, preferredCorner) {
+  const signature = `${preferredCorner || "any"}:${isChanceNode ? "C" : "P"}:${depth}:${getBoardSignature(values)}`;
   if (cache.has(signature)) return cache.get(signature);
 
   if (depth <= 0) {
-    const evaluation = evaluateBoardValues(values);
+    const evaluation = evaluateBoardValues(values, 0, preferredCorner);
     cache.set(signature, evaluation);
     return evaluation;
   }
@@ -1162,7 +1279,7 @@ function evaluateHoleFuture(values, depth, isChanceNode, cache) {
   if (isChanceNode) {
     const emptyCells = getEmptyPositions(values);
     if (emptyCells.length === 0) {
-      const fallback = evaluateHoleFuture(values, depth - 1, false, cache);
+      const fallback = evaluateHoleFuture(values, depth - 1, false, cache, preferredCorner);
       cache.set(signature, fallback);
       return fallback;
     }
@@ -1178,14 +1295,14 @@ function evaluateHoleFuture(values, depth, isChanceNode, cache) {
         { value: 4, probability: 0.1 },
       ].forEach(({ value, probability }) => {
         const nextValues = applySpawnToValues(values, row, col, value);
-        const score = evaluateHoleFuture(nextValues, depth - 1, false, cache);
+        const score = evaluateHoleFuture(nextValues, depth - 1, false, cache, preferredCorner);
         weightedTotal += score * probability;
         probabilityTotal += probability;
         worstCase = Math.min(worstCase, score);
       });
     });
 
-    const averageScore = probabilityTotal ? weightedTotal / probabilityTotal : evaluateBoardValues(values);
+    const averageScore = probabilityTotal ? weightedTotal / probabilityTotal : evaluateBoardValues(values, 0, preferredCorner);
     const blendedChanceScore = (averageScore * 0.68) + (worstCase * 0.32);
     cache.set(signature, blendedChanceScore);
     return blendedChanceScore;
@@ -1198,7 +1315,7 @@ function evaluateHoleFuture(values, depth, isChanceNode, cache) {
     const simulation = simulateDirectionOnValues(values, direction);
     if (!simulation.moved) return;
     hasMove = true;
-    const futureScore = evaluateHoleFuture(simulation.values, depth - 1, true, cache);
+    const futureScore = evaluateHoleFuture(simulation.values, depth - 1, true, cache, preferredCorner);
     const turnScore = futureScore
       + (simulation.gainedScore * 36)
       + (simulation.highestMerge * 14);
@@ -1212,6 +1329,7 @@ function evaluateHoleFuture(values, depth, isChanceNode, cache) {
 
 function getHoleBestMove() {
   const currentValues = boardValuesFromState();
+  const preferredCorner = holePreferredCorner || determineHolePreferredCorner(currentValues);
   const depth = getHoleSearchDepth(currentValues);
   const cache = new Map();
   let bestDirection = null;
@@ -1220,7 +1338,7 @@ function getHoleBestMove() {
   HOLE_DIRECTIONS.forEach((direction) => {
     const simulation = simulateDirectionOnValues(currentValues, direction);
     if (!simulation.moved) return;
-    const score = evaluateHoleFuture(simulation.values, depth - 1, true, cache)
+    const score = evaluateHoleFuture(simulation.values, depth - 1, true, cache, preferredCorner)
       + (simulation.gainedScore * 42)
       + (simulation.highestMerge * 18);
     if (score > bestScore) {
@@ -1228,6 +1346,14 @@ function getHoleBestMove() {
       bestDirection = direction;
     }
   });
+
+  if (bestDirection) {
+    const corners = getCornerDefinitions();
+    const corner = corners[preferredCorner];
+    if (corner && (bestDirection === corner.vertical || bestDirection === corner.horizontal)) {
+      holePreferredCorner = preferredCorner;
+    }
+  }
 
   return bestDirection;
 }
@@ -1260,6 +1386,7 @@ function startHoleMode() {
   stopDemoMode();
   holeMode = true;
   holeSequenceProgress = 0;
+  holePreferredCorner = determineHolePreferredCorner(boardValuesFromState());
   setStatus("MODO H.O.L.E. Pulsa Espacio para parar.");
   scheduleHoleMove();
 }
