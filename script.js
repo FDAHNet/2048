@@ -5153,7 +5153,6 @@ renderSaveSlots();
 if (advancedMode) {
   void ensureAdvancedPlayer();
 }
-if (!restoreSessionSnapshot()) {
-  startAttractMode();
-}
+clearSessionSnapshot();
+startAttractMode();
 
