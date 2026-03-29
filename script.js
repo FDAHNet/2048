@@ -19,6 +19,7 @@ const GITHUB_REPO = "2048";
 const GLOBAL_RECORD_LABEL = "record";
 const WORKER_API_URL = "https://angeloso-2048-records.mcdrer.workers.dev";
 const HOLE_SEQUENCE = ["h", "o", "l", "e"];
+const CTRL_SEQUENCE = ["c", "t", "r", "l"];
 const HOLE_DIRECTIONS = ["up", "left", "right", "down"];
 const AUTOSAVE_INTERVAL_MS = 30 * 60 * 1000;
 const INITIALS_TIMEOUT_MS = 60 * 1000;
@@ -102,6 +103,13 @@ const showStatsButton = document.getElementById("show-stats-button");
 const statsPanelElement = document.getElementById("stats-panel");
 const statsPanelContentElement = document.getElementById("stats-panel-content");
 const closeStatsButton = document.getElementById("close-stats-button");
+const adminPanelElement = document.getElementById("admin-panel");
+const adminSummaryGridElement = document.getElementById("admin-summary-grid");
+const adminRecordsGridElement = document.getElementById("admin-records-grid");
+const adminUsersBodyElement = document.getElementById("admin-users-body");
+const adminPanelStatusElement = document.getElementById("admin-panel-status");
+const closeAdminButton = document.getElementById("close-admin-button");
+const refreshAdminButton = document.getElementById("refresh-admin-button");
 const uiFxLayerElement = document.getElementById("ui-fx-layer");
 const starfieldElement = document.getElementById("starfield");
 const attractOverlayElement = document.getElementById("attract-overlay");
@@ -176,6 +184,7 @@ let demoTimer = null;
 let holeMode = false;
 let holeTimer = null;
 let holeSequenceProgress = 0;
+let ctrlSequenceProgress = 0;
 let holePreferredCorner = null;
 let holeRunUsed = false;
 let attractDismissed = false;
@@ -184,6 +193,9 @@ let gameSessionId = 0;
 let expandedRecordsMode = null;
 let replayArrowRotation = 0;
 let statsPanelOpen = false;
+let adminPanelOpen = false;
+let adminPanelLoading = false;
+let adminOverview = null;
 let lastGameOverReason = "";
 let globalRecordsCache = Object.fromEntries(
   ["4x4", "5x5", "6x6", "8x8"].map((mode) => [
@@ -204,6 +216,7 @@ let moveHistory = [];
 let moveSequence = 0;
 let initialsTimerInterval = null;
 let saveSlotsPanelOpen = false;
+let advancedSessionReported = false;
 const ARCADE_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 const INITIALS_GRID_CHARS = [...ARCADE_ALPHABET, "?"];
 const INITIALS_GRID_COLUMNS = 9;
@@ -578,8 +591,44 @@ async function syncAdvancedCredits(nextCredits) {
   return body;
 }
 
+async function reportAdvancedSession(reason, settlement = {}) {
+  if (!advancedMode || demoMode || advancedSessionReported) return;
+  if (!advancedPlayerAuth?.alias || !advancedPlayerAuth?.pinHash) return;
+  advancedSessionReported = true;
+
+  try {
+    await postWorkerJson("/player/session", {
+      alias: advancedPlayerAuth.alias,
+      pinHash: advancedPlayerAuth.pinHash,
+      mode: `${boardSize}x${boardSize}`,
+      category: getCurrentRecordCategory(),
+      reason,
+      score: gameState.score,
+      elapsedMs: getElapsedMs(),
+      highestTile: getHighestTileValue(),
+      totalStake: Number(settlement.totalStake || 0),
+      payout: Number(settlement.payout || 0),
+      wonCount: Number(settlement.winnersCount || 0),
+      voided: Boolean(settlement.voided),
+    });
+  } catch (error) {
+    console.warn("No pude sincronizar la sesion avanzada:", error);
+  }
+}
+
 async function settleAdvancedRound(reason) {
-  if (!activeAdvancedRound || activeAdvancedRound.settled) return;
+  if (!activeAdvancedRound) {
+    return { round: null, payout: 0, winnersCount: 0, totalStake: 0, voided: false };
+  }
+  if (activeAdvancedRound.settled) {
+    return {
+      round: cloneAdvancedRound(activeAdvancedRound),
+      payout: Number(activeAdvancedRound.payout || 0),
+      winnersCount: Number(activeAdvancedRound.winnersCount || 0),
+      totalStake: Number(activeAdvancedRound.totalStake || 0),
+      voided: Boolean(activeAdvancedRound.voidedReason),
+    };
+  }
 
   const round = cloneAdvancedRound(activeAdvancedRound);
   round.settled = true;
@@ -594,7 +643,7 @@ async function settleAdvancedRound(reason) {
     }
     renderAdvancedBetsPanel();
     persistSessionSnapshot();
-    return;
+    return { round, payout: 0, winnersCount: 0, totalStake: round.totalStake, voided: true };
   }
 
   const context = {
@@ -605,6 +654,9 @@ async function settleAdvancedRound(reason) {
 
   const winners = round.wagers.filter((wager) => evaluateAdvancedBet(wager.id, wager.prediction, context));
   const payout = winners.reduce((sum, wager) => sum + Math.round(wager.stake * wager.payout), 0);
+  round.winnersCount = winners.length;
+  round.payout = payout;
+  activeAdvancedRound = round;
 
   try {
     if (payout > 0) {
@@ -619,6 +671,7 @@ async function settleAdvancedRound(reason) {
 
   renderAdvancedBetsPanel();
   persistSessionSnapshot();
+  return { round, payout, winnersCount: winners.length, totalStake: round.totalStake, voided: false };
 }
 
 async function ensureAdvancedPlayer(options = {}) {
@@ -683,6 +736,115 @@ function formatElapsedTime(ms) {
   const minutes = Math.floor((totalSeconds % 3600) / 60);
   const seconds = totalSeconds % 60;
   return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
+
+function formatAdminNumber(value) {
+  return new Intl.NumberFormat("es-ES").format(Number(value || 0));
+}
+
+function formatAdminDate(value) {
+  if (!value) return "--";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "--";
+  return new Intl.DateTimeFormat("es-ES", {
+    year: "2-digit",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function renderAdminOverview() {
+  if (!adminSummaryGridElement || !adminRecordsGridElement || !adminUsersBodyElement || !adminPanelStatusElement) return;
+
+  if (!adminOverview) {
+    adminSummaryGridElement.innerHTML = "";
+    adminRecordsGridElement.innerHTML = "";
+    adminUsersBodyElement.innerHTML = '<tr><td class="admin-table-empty" colspan="9">Sin datos todavia.</td></tr>';
+    adminPanelStatusElement.textContent = adminPanelLoading ? "Cargando panel de control..." : "Pulsa Refrescar para leer el estado global.";
+    return;
+  }
+
+  const { summary = {}, players = [], recordsByMode = {} } = adminOverview;
+  adminPanelStatusElement.textContent = `Actualizado: ${formatAdminDate(summary.generatedAt)}. Usuarios ${formatAdminNumber(summary.totalUsers)}.`;
+
+  const summaryCards = [
+    { label: "Usuarios", value: formatAdminNumber(summary.totalUsers) },
+    { label: "Creditos", value: formatAdminNumber(summary.totalCredits) },
+    { label: "Media creditos", value: formatAdminNumber(summary.averageCredits) },
+    { label: "Partidas", value: formatAdminNumber(summary.totalGamesPlayed) },
+    { label: "Apostado", value: formatAdminNumber(summary.totalWagered) },
+    { label: "Pagado", value: formatAdminNumber(summary.totalPayout) },
+  ];
+  adminSummaryGridElement.innerHTML = summaryCards.map((card) => `
+    <article class="admin-summary-card">
+      <small class="admin-summary-card-label">${escapeHtml(card.label)}</small>
+      <strong class="admin-summary-card-value">${escapeHtml(card.value)}</strong>
+    </article>
+  `).join("");
+
+  adminRecordsGridElement.innerHTML = GLOBAL_MODES.flatMap((mode) => RECORD_CATEGORIES.map((category) => {
+    const entry = recordsByMode?.[mode]?.[category] || {};
+    return `
+      <article class="admin-record-card">
+        <small>${escapeHtml(mode)} · ${escapeHtml(RECORD_CATEGORY_LABELS[category])}</small>
+        <strong>${escapeHtml(formatAdminNumber(entry.bestScore || 0))}</strong>
+        <span>${escapeHtml(entry.bestInitials || "---")} · ${escapeHtml(formatAdminNumber(entry.count || 0))} records</span>
+      </article>
+    `;
+  })).join("");
+
+  if (!players.length) {
+    adminUsersBodyElement.innerHTML = '<tr><td class="admin-table-empty" colspan="9">Todavia no hay jugadores avanzados.</td></tr>';
+    return;
+  }
+
+  adminUsersBodyElement.innerHTML = players.map((player) => `
+    <tr>
+      <td>${escapeHtml(player.alias)}</td>
+      <td>${escapeHtml(formatAdminNumber(player.credits))}</td>
+      <td>${escapeHtml(formatAdminNumber(player.gamesPlayed))}</td>
+      <td>${escapeHtml(formatAdminNumber(player.normalGames))}</td>
+      <td>${escapeHtml(formatAdminNumber(player.holeGames))}</td>
+      <td>${escapeHtml(formatAdminNumber(player.totalWagered))}</td>
+      <td>${escapeHtml(formatAdminNumber(player.totalPayout))}</td>
+      <td>${escapeHtml(formatAdminNumber(player.bestScore))}</td>
+      <td>${escapeHtml(formatAdminDate(player.lastSeen))}</td>
+    </tr>
+  `).join("");
+}
+
+async function loadAdminOverview(force = false) {
+  if (adminPanelLoading && !force) return;
+  adminPanelLoading = true;
+  renderAdminOverview();
+  try {
+    adminOverview = await postWorkerJson("/admin/overview", {});
+  } catch (error) {
+    adminPanelStatusElement.textContent = `No pude cargar el panel: ${error.message}`;
+  } finally {
+    adminPanelLoading = false;
+    renderAdminOverview();
+  }
+}
+
+function setAdminPanelOpen(nextOpen) {
+  adminPanelOpen = Boolean(nextOpen);
+  adminPanelElement?.classList.toggle("hidden", !adminPanelOpen);
+  if (adminPanelOpen) {
+    renderAdminOverview();
+    void loadAdminOverview();
+  }
 }
 
 function getElapsedMs() {
@@ -888,7 +1050,7 @@ function endGameByMachine() {
   render();
   renderGameTimer();
   setGameOverOverlay(true, "BY MACHINE");
-  void settleAdvancedRound("BY MACHINE");
+  void settleAdvancedRound("BY MACHINE").then((settlement) => reportAdvancedSession("BY MACHINE", settlement));
   maybePersistCurrentScore();
   setStatus("No quedan movimientos. Pulsa Nueva partida.");
 }
@@ -1386,6 +1548,7 @@ function startGame(options = {}) {
   currentReplay = null;
   holeRunUsed = false;
   activeAdvancedRound = demo ? null : cloneAdvancedRound(advancedRound);
+  advancedSessionReported = false;
   advancedBetResultMessage = "";
   moveHistory = [];
   moveSequence = 0;
@@ -3527,6 +3690,7 @@ function scheduleDemoMove() {
 
 function startAttractMode() {
   stopHoleMode({ keepStatus: true });
+  setAdminPanelOpen(false);
   attractDismissed = false;
   awaitingManualStart = false;
   advancedBetsVisible = false;
@@ -3539,6 +3703,7 @@ function startAttractMode() {
 
 function enterManualStartMode() {
   awaitingManualStart = true;
+  setAdminPanelOpen(false);
   demoMode = false;
   advancedBetsVisible = advancedMode;
   advancedBetsCollapsed = false;
@@ -3655,7 +3820,7 @@ function finishGame() {
   gameState.over = true;
   renderGameTimer();
   setGameOverOverlay(true, "BY USER");
-  void settleAdvancedRound("BY USER");
+  void settleAdvancedRound("BY USER").then((settlement) => reportAdvancedSession("BY USER", settlement));
   maybePersistCurrentScore();
   if (!initialsEntryState.active) setStatus("Partida finalizada.");
 }
@@ -4106,6 +4271,13 @@ function handleKeydown(event) {
   if (awaitingManualStart) {
     return;
   }
+  if (adminPanelOpen) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      setAdminPanelOpen(false);
+    }
+    return;
+  }
   if (gamePaused) {
     if (event.key === "Escape") {
       event.preventDefault();
@@ -4197,9 +4369,9 @@ function handleKeydown(event) {
   };
   const direction = keyMap[event.key];
   if (!direction && !event.repeat && !replayMode && !initialsEntryState.active) {
-    const nextExpected = HOLE_SEQUENCE[holeSequenceProgress];
     const pressed = event.key?.toLowerCase?.() || "";
-    if (pressed === nextExpected) {
+    const nextHoleExpected = HOLE_SEQUENCE[holeSequenceProgress];
+    if (pressed === nextHoleExpected) {
       holeSequenceProgress += 1;
       if (holeSequenceProgress === HOLE_SEQUENCE.length) {
         event.preventDefault();
@@ -4209,6 +4381,24 @@ function handleKeydown(event) {
       holeSequenceProgress = 1;
     } else {
       holeSequenceProgress = 0;
+    }
+
+    if (attractDismissed && !demoMode && !gameState.over) {
+      const nextCtrlExpected = CTRL_SEQUENCE[ctrlSequenceProgress];
+      if (pressed === nextCtrlExpected) {
+        ctrlSequenceProgress += 1;
+        if (ctrlSequenceProgress === CTRL_SEQUENCE.length) {
+          event.preventDefault();
+          ctrlSequenceProgress = 0;
+          setAdminPanelOpen(true);
+        }
+      } else if (pressed === CTRL_SEQUENCE[0]) {
+        ctrlSequenceProgress = 1;
+      } else {
+        ctrlSequenceProgress = 0;
+      }
+    } else {
+      ctrlSequenceProgress = 0;
     }
   }
   if (!direction) return;
@@ -4300,6 +4490,8 @@ showStatsButton?.addEventListener("click", () => {
   setStatsPanelOpen(true);
 });
 closeStatsButton?.addEventListener("click", () => setStatsPanelOpen(false));
+closeAdminButton?.addEventListener("click", () => setAdminPanelOpen(false));
+refreshAdminButton?.addEventListener("click", () => { void loadAdminOverview(true); });
 closeUndoButton.addEventListener("click", () => setUndoPanelOpen(false));
 closeSaveSlotsButton.addEventListener("click", () => setSaveSlotsPanelOpen(false));
 startAttractButton.addEventListener("click", startActualGame);
@@ -4389,6 +4581,7 @@ window.addEventListener("resize", render);
 buildGrid();
 applyTheme(theme);
 updateAudioToggleButton();
+renderAdminOverview();
 updateAdvancedModeUI();
 updateManualStartUI();
 updatePauseButton();

@@ -337,6 +337,55 @@
         </div>
       </section>
     </section>
+
+    <section id="admin-panel" class="admin-panel hidden" aria-labelledby="admin-panel-title">
+      <div class="admin-panel-shell">
+        <div class="admin-panel-header">
+          <div>
+            <p class="initials-eyebrow">Control</p>
+            <h2 id="admin-panel-title">Panel de Control</h2>
+            <p class="admin-panel-copy">Usuarios avanzados, creditos, actividad y estado global del sistema.</p>
+          </div>
+          <div class="admin-panel-actions">
+            <button id="refresh-admin-button" type="button" class="secondary-button">Refrescar</button>
+            <button id="close-admin-button" type="button" class="stats-close-button" aria-label="Cerrar panel de control">X</button>
+          </div>
+        </div>
+        <div id="admin-panel-status" class="admin-panel-status">Pulsa C T R L durante la partida para abrir este panel.</div>
+        <div id="admin-summary-grid" class="admin-summary-grid"></div>
+        <div class="admin-columns">
+          <section class="admin-card">
+            <div class="admin-card-head">
+              <h3>Records Globales</h3>
+            </div>
+            <div id="admin-records-grid" class="admin-records-grid"></div>
+          </section>
+          <section class="admin-card admin-card-wide">
+            <div class="admin-card-head">
+              <h3>Usuarios Avanzados</h3>
+            </div>
+            <div class="admin-table-wrap">
+              <table class="admin-table">
+                <thead>
+                  <tr>
+                    <th>Alias</th>
+                    <th>Creditos</th>
+                    <th>Partidas</th>
+                    <th>Normal</th>
+                    <th>H.O.L.E.</th>
+                    <th>Apostado</th>
+                    <th>Pagado</th>
+                    <th>Mejor</th>
+                    <th>Ultimo acceso</th>
+                  </tr>
+                </thead>
+                <tbody id="admin-users-body"></tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+      </div>
+    </section>
   </main>
 
   <script src="./script.js?v=__BUILD_STAMP__"></script>

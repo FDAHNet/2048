@@ -15,6 +15,7 @@ const MAX_SCORE = 1_000_000_000_000;
 const MAX_REPLAY_TURNS = 600_000;
 const DEFAULT_PLAYER_CREDITS = 100;
 const MAX_CREDITS = 1_000_000;
+const MAX_ADMIN_PAGES = 20;
 
 export default {
   async fetch(request, env) {
@@ -74,6 +75,14 @@ export default {
 
       if (url.pathname === '/player/credits') {
         return await handlePlayerCredits(payload, env, corsHeaders);
+      }
+
+      if (url.pathname === '/player/session') {
+        return await handlePlayerSession(payload, env, corsHeaders);
+      }
+
+      if (url.pathname === '/admin/overview') {
+        return await handleAdminOverview(env, corsHeaders);
       }
 
       const validation = validatePayload(payload);
@@ -229,6 +238,22 @@ function validateCreditsPayload(payload) {
   return '';
 }
 
+function validateSessionPayload(payload) {
+  const validation = validatePlayerAccessPayload(payload);
+  if (validation) return validation;
+  if (!ALLOWED_MODES.has(payload.mode || '')) return 'Mode is invalid';
+  if (!ALLOWED_CATEGORIES.has(payload.category || '')) return 'Category is invalid';
+  if (!['BY USER', 'BY MACHINE'].includes(payload.reason || '')) return 'Reason is invalid';
+  if (!Number.isFinite(Number(payload.score)) || Number(payload.score) < 0 || Number(payload.score) > MAX_SCORE) return 'Score is invalid';
+  if (!Number.isFinite(Number(payload.elapsedMs)) || Number(payload.elapsedMs) < 0) return 'Elapsed time is invalid';
+  if (!Number.isFinite(Number(payload.highestTile)) || Number(payload.highestTile) < 0) return 'Highest tile is invalid';
+  if (!Number.isFinite(Number(payload.totalStake)) || Number(payload.totalStake) < 0) return 'Stake is invalid';
+  if (!Number.isFinite(Number(payload.payout)) || Number(payload.payout) < 0) return 'Payout is invalid';
+  if (!Number.isFinite(Number(payload.wonCount)) || Number(payload.wonCount) < 0) return 'Won count is invalid';
+  if (typeof payload.voided !== 'boolean') return 'Voided flag is invalid';
+  return '';
+}
+
 async function handlePlayerAccess(payload, env, corsHeaders) {
   const validation = validatePlayerAccessPayload(payload);
   if (validation) return json({ error: validation }, 400, corsHeaders);
@@ -237,8 +262,8 @@ async function handlePlayerAccess(payload, env, corsHeaders) {
   const issue = await findPlayerIssueByAlias(env, alias);
   if (!issue) {
     const createdAt = new Date().toISOString();
-    const body = buildPlayerIssueBody(alias, payload.pinHash, DEFAULT_PLAYER_CREDITS, createdAt, createdAt);
-    const created = await createIssue(env, `[Player] ${alias}`, body, [PLAYER_LABEL]);
+    const player = createDefaultPlayerRecord(alias, payload.pinHash, createdAt);
+    const created = await createIssue(env, `[Player] ${alias}`, buildPlayerIssueBody(player), [PLAYER_LABEL]);
     return json({ ok: true, created: true, alias, credits: DEFAULT_PLAYER_CREDITS, issueNumber: created.number }, 200, corsHeaders);
   }
 
@@ -263,36 +288,201 @@ async function handlePlayerCredits(payload, env, corsHeaders) {
     return json({ error: 'Alias o PIN incorrecto' }, 403, corsHeaders);
   }
 
-  const credits = Math.max(0, Math.min(MAX_CREDITS, Math.trunc(Number(payload.credits))));
-  const body = buildPlayerIssueBody(parsed.alias, parsed.pinHash, credits, parsed.createdAt, new Date().toISOString());
-  await updateIssue(env, issue.number, { body });
+  const credits = clampInt(payload.credits, 0, MAX_CREDITS);
+  const updated = {
+    ...parsed,
+    credits,
+    updatedAt: new Date().toISOString(),
+  };
+  await updateIssue(env, issue.number, { body: buildPlayerIssueBody(updated) });
   return json({ ok: true, alias: parsed.alias, credits }, 200, corsHeaders);
+}
+
+async function handlePlayerSession(payload, env, corsHeaders) {
+  const validation = validateSessionPayload(payload);
+  if (validation) return json({ error: validation }, 400, corsHeaders);
+  const alias = String(payload.alias).toUpperCase();
+
+  const issue = await findPlayerIssueByAlias(env, alias);
+  if (!issue) return json({ error: 'Jugador no encontrado' }, 404, corsHeaders);
+
+  const parsed = parsePlayerIssue(issue);
+  if (!parsed || parsed.pinHash.toLowerCase() !== payload.pinHash.toLowerCase()) {
+    return json({ error: 'Alias o PIN incorrecto' }, 403, corsHeaders);
+  }
+
+  const now = new Date().toISOString();
+  const payout = clampInt(payload.payout, 0, MAX_CREDITS);
+  const totalStake = clampInt(payload.totalStake, 0, MAX_CREDITS);
+  const wonCount = clampInt(payload.wonCount, 0, 1000);
+  const voided = Boolean(payload.voided);
+  const next = {
+    ...parsed,
+    gamesPlayed: parsed.gamesPlayed + 1,
+    normalGames: parsed.normalGames + (payload.category === 'normal' ? 1 : 0),
+    holeGames: parsed.holeGames + (payload.category === 'hole' ? 1 : 0),
+    wins: parsed.wins + (!voided && payout > 0 ? 1 : 0),
+    losses: parsed.losses + (!voided && payout <= 0 ? 1 : 0),
+    voids: parsed.voids + (voided ? 1 : 0),
+    totalWagered: parsed.totalWagered + totalStake,
+    totalPayout: parsed.totalPayout + payout,
+    bestScore: Math.max(parsed.bestScore, clampInt(payload.score, 0, MAX_SCORE)),
+    highestTile: Math.max(parsed.highestTile, clampInt(payload.highestTile, 0, MAX_SCORE)),
+    lastMode: payload.mode,
+    lastCategory: payload.category,
+    lastReason: payload.reason,
+    lastScore: clampInt(payload.score, 0, MAX_SCORE),
+    lastSeen: now,
+    updatedAt: now,
+    lastWonCount: wonCount,
+  };
+
+  await updateIssue(env, issue.number, { body: buildPlayerIssueBody(next) });
+  return json({ ok: true, alias: next.alias, gamesPlayed: next.gamesPlayed }, 200, corsHeaders);
+}
+
+async function handleAdminOverview(env, corsHeaders) {
+  const players = (await listIssuesByLabel(env, PLAYER_LABEL, MAX_ADMIN_PAGES))
+    .map(parsePlayerIssue)
+    .filter(Boolean)
+    .sort((a, b) => (b.credits - a.credits) || (b.bestScore - a.bestScore) || a.alias.localeCompare(b.alias));
+
+  const recordIssues = await listIssuesByLabel(env, GITHUB_LABEL, MAX_ADMIN_PAGES);
+  const records = recordIssues.map(parseRecordIssue).filter(Boolean);
+  const generatedAt = new Date().toISOString();
+
+  const totalCredits = players.reduce((sum, player) => sum + player.credits, 0);
+  const totalGamesPlayed = players.reduce((sum, player) => sum + player.gamesPlayed, 0);
+  const totalWagered = players.reduce((sum, player) => sum + player.totalWagered, 0);
+  const totalPayout = players.reduce((sum, player) => sum + player.totalPayout, 0);
+
+  const recordsByMode = Object.fromEntries(
+    Array.from(ALLOWED_MODES).map((mode) => [
+      mode,
+      Object.fromEntries(Array.from(ALLOWED_CATEGORIES).map((category) => [category, {
+        count: 0,
+        bestScore: 0,
+        bestInitials: '---',
+      }]))
+    ])
+  );
+
+  for (const record of records) {
+    const bucket = recordsByMode?.[record.mode]?.[record.category || 'normal'];
+    if (!bucket) continue;
+    bucket.count += 1;
+    if (record.score > bucket.bestScore) {
+      bucket.bestScore = record.score;
+      bucket.bestInitials = record.initials;
+    }
+  }
+
+  return json({
+    ok: true,
+    summary: {
+      generatedAt,
+      totalUsers: players.length,
+      totalCredits,
+      averageCredits: players.length ? Math.round(totalCredits / players.length) : 0,
+      totalGamesPlayed,
+      totalWagered,
+      totalPayout,
+    },
+    players: players.map((player) => ({
+      alias: player.alias,
+      credits: player.credits,
+      gamesPlayed: player.gamesPlayed,
+      normalGames: player.normalGames,
+      holeGames: player.holeGames,
+      wins: player.wins,
+      losses: player.losses,
+      voids: player.voids,
+      totalWagered: player.totalWagered,
+      totalPayout: player.totalPayout,
+      bestScore: player.bestScore,
+      highestTile: player.highestTile,
+      lastMode: player.lastMode,
+      lastCategory: player.lastCategory,
+      lastReason: player.lastReason,
+      lastScore: player.lastScore,
+      lastSeen: player.lastSeen,
+      createdAt: player.createdAt,
+      updatedAt: player.updatedAt,
+    })),
+    recordsByMode,
+  }, 200, corsHeaders);
 }
 
 async function findPlayerIssueByAlias(env, alias) {
   const normalizedAlias = String(alias).toUpperCase();
-  for (let page = 1; page <= 10; page += 1) {
-    const response = await githubRequest(env, `/repos/${GITHUB_OWNER}/${GITHUB_REPO}/issues?state=all&labels=${PLAYER_LABEL}&per_page=100&page=${page}`, {
+  const issues = await listIssuesByLabel(env, PLAYER_LABEL, MAX_ADMIN_PAGES);
+  return issues.find((item) => !item.pull_request && item.title === `[Player] ${normalizedAlias}`) || null;
+}
+
+async function listIssuesByLabel(env, label, maxPages = 10) {
+  const issues = [];
+  for (let page = 1; page <= maxPages; page += 1) {
+    const response = await githubRequest(env, `/repos/${GITHUB_OWNER}/${GITHUB_REPO}/issues?state=all&labels=${label}&per_page=100&page=${page}`, {
       method: 'GET',
       headers: { 'Accept': 'application/vnd.github+json' },
     });
-    const issues = await response.json();
-    const issue = issues.find((item) => !item.pull_request && item.title === `[Player] ${normalizedAlias}`);
-    if (issue) return issue;
-    if (issues.length < 100) break;
+    const batch = await response.json();
+    issues.push(...batch.filter((item) => !item.pull_request));
+    if (batch.length < 100) break;
   }
-  return null;
+  return issues;
 }
 
-function buildPlayerIssueBody(alias, pinHash, credits, createdAt, updatedAt) {
+function createDefaultPlayerRecord(alias, pinHash, createdAt) {
+  return {
+    alias,
+    pinHash,
+    credits: DEFAULT_PLAYER_CREDITS,
+    gamesPlayed: 0,
+    normalGames: 0,
+    holeGames: 0,
+    wins: 0,
+    losses: 0,
+    voids: 0,
+    totalWagered: 0,
+    totalPayout: 0,
+    bestScore: 0,
+    highestTile: 0,
+    lastMode: '',
+    lastCategory: 'normal',
+    lastReason: '',
+    lastScore: 0,
+    lastSeen: createdAt,
+    createdAt,
+    updatedAt: createdAt,
+    lastWonCount: 0,
+  };
+}
+
+function buildPlayerIssueBody(player) {
   return [
     'Advanced mode player account',
     '',
-    `Alias: ${alias}`,
-    `PinHash: ${pinHash}`,
-    `Credits: ${credits}`,
-    `CreatedAt: ${createdAt}`,
-    `UpdatedAt: ${updatedAt}`,
+    `Alias: ${player.alias}`,
+    `PinHash: ${player.pinHash}`,
+    `Credits: ${player.credits}`,
+    `GamesPlayed: ${player.gamesPlayed}`,
+    `NormalGames: ${player.normalGames}`,
+    `HoleGames: ${player.holeGames}`,
+    `Wins: ${player.wins}`,
+    `Losses: ${player.losses}`,
+    `Voids: ${player.voids}`,
+    `TotalWagered: ${player.totalWagered}`,
+    `TotalPayout: ${player.totalPayout}`,
+    `BestScore: ${player.bestScore}`,
+    `HighestTile: ${player.highestTile}`,
+    `LastMode: ${player.lastMode || '-'}`,
+    `LastCategory: ${player.lastCategory || 'normal'}`,
+    `LastReason: ${player.lastReason || '-'}`,
+    `LastScore: ${player.lastScore || 0}`,
+    `LastSeen: ${player.lastSeen}`,
+    `CreatedAt: ${player.createdAt}`,
+    `UpdatedAt: ${player.updatedAt}`,
   ].join('\n');
 }
 
@@ -306,9 +496,49 @@ function parsePlayerIssue(issue) {
   return {
     alias,
     pinHash,
-    credits: Number(creditsText),
+    credits: clampInt(creditsText, 0, MAX_CREDITS),
+    gamesPlayed: readIssueInt(body, 'GamesPlayed'),
+    normalGames: readIssueInt(body, 'NormalGames'),
+    holeGames: readIssueInt(body, 'HoleGames'),
+    wins: readIssueInt(body, 'Wins'),
+    losses: readIssueInt(body, 'Losses'),
+    voids: readIssueInt(body, 'Voids'),
+    totalWagered: readIssueInt(body, 'TotalWagered'),
+    totalPayout: readIssueInt(body, 'TotalPayout'),
+    bestScore: readIssueInt(body, 'BestScore'),
+    highestTile: readIssueInt(body, 'HighestTile'),
+    lastMode: body.match(/LastMode:\s*([^\n]+)/i)?.[1]?.trim() || '',
+    lastCategory: body.match(/LastCategory:\s*([^\n]+)/i)?.[1]?.trim() || 'normal',
+    lastReason: body.match(/LastReason:\s*([^\n]+)/i)?.[1]?.trim() || '',
+    lastScore: readIssueInt(body, 'LastScore'),
+    lastSeen: body.match(/LastSeen:\s*([^\n]+)/i)?.[1]?.trim() || createdAt,
     createdAt,
+    updatedAt: body.match(/UpdatedAt:\s*([^\n]+)/i)?.[1]?.trim() || issue.updated_at || createdAt,
   };
+}
+
+function parseRecordIssue(issue) {
+  const body = issue.body || '';
+  const initials = body.match(/Initials:\s*([A-Z?]{3})/i)?.[1]
+    || issue.title.match(/^\[Record\]\s+([A-Z?]{3})/i)?.[1]
+    || '---';
+  const mode = body.match(/Mode:\s*(\dx\d)/i)?.[1]
+    || issue.title.match(/-\s*(\dx\d)\b/i)?.[1]
+    || '4x4';
+  const category = body.match(/Category:\s*(normal|hole)/i)?.[1]?.toLowerCase() || 'normal';
+  const score = Number(body.match(/Score:\s*([0-9]+)/i)?.[1] || issue.title.match(/-\s*([0-9]+)\s*-/)?.[1] || 0);
+  if (!ALLOWED_MODES.has(mode) || !ALLOWED_CATEGORIES.has(category) || !Number.isFinite(score)) return null;
+  return { initials, mode, category, score };
+}
+
+function readIssueInt(body, label) {
+  const match = body.match(new RegExp(`${label}:\\s*([0-9]+)`, 'i'))?.[1];
+  return clampInt(match || 0, 0, MAX_SCORE);
+}
+
+function clampInt(value, min, max) {
+  const numeric = Math.trunc(Number(value) || 0);
+  return Math.max(min, Math.min(max, numeric));
 }
 
 function isSpawnObject(spawn, boardSize) {
