@@ -249,13 +249,13 @@ h1 {
 
 .version-stamp {
   display: inline-block;
-  margin-left: 0.45rem;
-  font-size: 0.2em;
-  letter-spacing: 0.08em;
+  margin-left: 0.7rem;
+  font-size: 0.72em;
+  letter-spacing: 0.12em;
   color: color-mix(in srgb, var(--accent) 70%, white 30%);
   opacity: 0.84;
-  vertical-align: middle;
-  transform: translateY(-0.2em);
+  vertical-align: baseline;
+  transform: none;
 }
 
 .lead {
