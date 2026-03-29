@@ -3689,6 +3689,10 @@ function normalizeInitials(value) {
 
 function openInitialsEntry(score) {
   if (demoMode || !attractDismissed || !gameState.over) return;
+  const mode = `${boardSize}x${boardSize}`;
+  const category = getCurrentRecordCategory();
+  const currentTopScore = getTopScoreForMode(mode, category);
+  const isGlobalTopScore = currentTopScore > 0 && score > currentTopScore;
   const previous = normalizeInitials(localStorage.getItem(PLAYER_INITIALS_KEY) || "");
   initialsEntryState.active = true;
   initialsEntryState.letters = ["", "", ""];
@@ -3700,7 +3704,7 @@ function openInitialsEntry(score) {
   initialsEntryElement.classList.remove("hidden");
   startInitialsTimer();
   persistSessionSnapshot();
-  setStatus("Nuevo record. Introduce tus iniciales.");
+  setStatus(isGlobalTopScore ? "Nuevo record global. Introduce tus iniciales." : "Nuevo record. Introduce tus iniciales.");
 }
 
 function closeInitialsEntry(options = {}) {
