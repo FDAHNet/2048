@@ -2470,6 +2470,15 @@ button:hover {
   background: rgba(255,255,255,0.06);
 }
 
+.admin-clickable-row {
+  cursor: pointer;
+}
+
+.admin-clickable-row td:first-child {
+  color: var(--accent);
+  font-weight: 700;
+}
+
 .admin-table-empty {
   text-align: center;
   color: var(--muted);
@@ -2517,6 +2526,36 @@ button:hover {
 .ledger-negative {
   color: #ff9f9f;
   font-weight: 700;
+}
+
+.admin-user-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.admin-user-summary-grid {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.admin-user-credits-tools {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.admin-user-credits-tools input {
+  width: 120px;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 12px;
+  padding: 10px 12px;
+  font: inherit;
+  color: var(--text);
+  background: rgba(0,0,0,0.18);
+}
+
+.admin-user-ledger-table {
+  min-width: 760px;
 }
 
 .hidden {
@@ -2737,6 +2776,10 @@ button:hover {
 
   .admin-summary-grid,
   .admin-records-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-user-summary-grid {
     grid-template-columns: 1fr;
   }
 

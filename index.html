@@ -415,6 +415,36 @@
             </div>
           </section>
         </div>
+        <section id="admin-user-panel" class="admin-card admin-user-panel hidden">
+          <div class="admin-card-head">
+            <h3>Ficha de Usuario</h3>
+            <div class="admin-panel-actions">
+              <button id="admin-user-refresh-button" type="button" class="secondary-button">Refrescar</button>
+              <button id="admin-user-close-button" type="button" class="stats-close-button" aria-label="Cerrar ficha de usuario">X</button>
+            </div>
+          </div>
+          <div id="admin-user-summary-grid" class="admin-summary-grid admin-user-summary-grid"></div>
+          <div class="admin-user-credits-tools">
+            <input id="admin-user-credit-delta" type="number" min="1" step="1" value="10" aria-label="Cantidad de creditos">
+            <button id="admin-user-add-credits-button" type="button">Sumar creditos</button>
+            <button id="admin-user-subtract-credits-button" type="button" class="danger-button">Restar creditos</button>
+          </div>
+          <div id="admin-user-status" class="admin-panel-status">Pulsa sobre un usuario para ver su ficha completa.</div>
+          <div class="admin-table-wrap">
+            <table class="admin-table admin-user-ledger-table">
+              <thead>
+                <tr>
+                  <th>Fecha</th>
+                  <th>Tipo</th>
+                  <th>Detalle</th>
+                  <th>Importe</th>
+                  <th>Saldo</th>
+                </tr>
+              </thead>
+              <tbody id="admin-user-ledger-body"></tbody>
+            </table>
+          </div>
+        </section>
       </div>
     </section>
     <section id="ledger-panel" class="admin-panel hidden" aria-labelledby="ledger-panel-title">

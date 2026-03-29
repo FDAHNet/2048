@@ -112,6 +112,8 @@ export default {
       if (url.pathname === '/player/session') return await handlePlayerSession(payload, env, corsHeaders);
       if (url.pathname === '/player/ledger') return await handlePlayerLedger(payload, env, corsHeaders);
       if (url.pathname === '/bets/config') return await handleBetsConfig(env, corsHeaders);
+      if (url.pathname === '/admin/player') return await handleAdminPlayer(payload, env, corsHeaders);
+      if (url.pathname === '/admin/player/credits') return await handleAdminPlayerCredits(payload, env, corsHeaders);
       if (url.pathname === '/admin/bets/save') return await handleAdminBetsSave(payload, env, corsHeaders);
       if (url.pathname === '/admin/overview') return await handleAdminOverview(env, corsHeaders);
 
@@ -285,6 +287,21 @@ function validateBetDefinitionsPayload(payload) {
   return '';
 }
 
+function validateAdminPlayerPayload(payload) {
+  if (!payload || typeof payload !== 'object') return 'Payload is required';
+  if (!/^[A-Za-z0-9_-]{3,16}$/.test(payload.alias || '')) return 'Alias is invalid';
+  return '';
+}
+
+function validateAdminPlayerCreditsPayload(payload) {
+  const validation = validateAdminPlayerPayload(payload);
+  if (validation) return validation;
+  const delta = Number(payload.delta);
+  if (!Number.isFinite(delta) || !Number.isInteger(delta) || delta === 0) return 'Delta is invalid';
+  if (Math.abs(delta) > MAX_CREDITS) return 'Delta is invalid';
+  return '';
+}
+
 function validateBetDefinition(definition) {
   if (!definition || typeof definition !== 'object') return 'Bet definition is invalid';
   if (!/^[a-z0-9-]{3,48}$/i.test(definition.id || '')) return 'Bet id is invalid';
@@ -453,6 +470,72 @@ async function handleAdminBetsSave(payload, env, corsHeaders) {
   const definitions = payload.definitions.map((definition, index) => normalizeBetDefinition(definition, index));
   await saveBetDefinitions(env, definitions);
   return json({ ok: true, definitions }, 200, corsHeaders);
+}
+
+async function handleAdminPlayer(payload, env, corsHeaders) {
+  const validation = validateAdminPlayerPayload(payload);
+  if (validation) return json({ error: validation }, 400, corsHeaders);
+  const alias = String(payload.alias).toUpperCase();
+  const issue = await findPlayerIssueByAlias(env, alias);
+  if (!issue) return json({ error: 'Jugador no encontrado' }, 404, corsHeaders);
+  const parsed = parsePlayerIssue(issue);
+  if (!parsed) return json({ error: 'Jugador no valido' }, 404, corsHeaders);
+  const comments = await listIssueComments(env, issue.number);
+  const entries = comments.map(parseLedgerComment).filter(Boolean).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  return json({
+    ok: true,
+    alias: parsed.alias,
+    credits: parsed.credits,
+    gamesPlayed: parsed.gamesPlayed,
+    normalGames: parsed.normalGames,
+    holeGames: parsed.holeGames,
+    totalWagered: parsed.totalWagered,
+    totalPayout: parsed.totalPayout,
+    bestScore: parsed.bestScore,
+    highestTile: parsed.highestTile,
+    lastSeen: parsed.lastSeen,
+    updatedAt: parsed.updatedAt,
+    entries,
+  }, 200, corsHeaders);
+}
+
+async function handleAdminPlayerCredits(payload, env, corsHeaders) {
+  const validation = validateAdminPlayerCreditsPayload(payload);
+  if (validation) return json({ error: validation }, 400, corsHeaders);
+  const alias = String(payload.alias).toUpperCase();
+  const issue = await findPlayerIssueByAlias(env, alias);
+  if (!issue) return json({ error: 'Jugador no encontrado' }, 404, corsHeaders);
+  const parsed = parsePlayerIssue(issue);
+  if (!parsed) return json({ error: 'Jugador no valido' }, 404, corsHeaders);
+  const now = new Date().toISOString();
+  const delta = Math.trunc(Number(payload.delta));
+  const credits = clampInt(parsed.credits + delta, 0, MAX_CREDITS);
+  const updated = { ...parsed, credits, updatedAt: now, lastSeen: now };
+  await updateIssue(env, issue.number, { body: buildPlayerIssueBody(updated) });
+  await createIssueComment(env, issue.number, buildLedgerComment({
+    date: now,
+    kind: delta > 0 ? 'adminplus' : 'adminminus',
+    amount: credits - parsed.credits,
+    balanceAfter: credits,
+    detail: `Ajuste manual de administrador (${delta > 0 ? '+' : ''}${delta})`,
+  }));
+  const comments = await listIssueComments(env, issue.number);
+  const entries = comments.map(parseLedgerComment).filter(Boolean).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  return json({
+    ok: true,
+    alias: updated.alias,
+    credits: updated.credits,
+    gamesPlayed: updated.gamesPlayed,
+    normalGames: updated.normalGames,
+    holeGames: updated.holeGames,
+    totalWagered: updated.totalWagered,
+    totalPayout: updated.totalPayout,
+    bestScore: updated.bestScore,
+    highestTile: updated.highestTile,
+    lastSeen: updated.lastSeen,
+    updatedAt: updated.updatedAt,
+    entries,
+  }, 200, corsHeaders);
 }
 
 async function handleAdminOverview(env, corsHeaders) {
@@ -685,9 +768,17 @@ function parseLedgerComment(comment) {
   const balanceAfter = Number(body.match(/BalanceAfter:\s*([0-9]+)/i)?.[1] || 0);
   const detail = body.match(/Detail:\s*([^\n]+)/i)?.[1]?.trim() || '';
   if (!date || !kind) return null;
+  const typeMap = {
+    wager: 'WAGER',
+    win: 'WIN',
+    loss: 'LOSS',
+    void: 'VOID',
+    adminplus: 'ADMIN +',
+    adminminus: 'ADMIN -',
+  };
   return {
     date,
-    type: kind.toUpperCase(),
+    type: typeMap[kind] || kind.toUpperCase(),
     amount,
     balanceAfter,
     detail,
@@ -844,5 +935,6 @@ function json(data, status, headers) {
     },
   });
 }
+
 
 

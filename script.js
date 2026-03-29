@@ -123,6 +123,15 @@ const adminUsersBodyElement = document.getElementById("admin-users-body");
 const adminPanelStatusElement = document.getElementById("admin-panel-status");
 const closeAdminButton = document.getElementById("close-admin-button");
 const refreshAdminButton = document.getElementById("refresh-admin-button");
+const adminUserPanelElement = document.getElementById("admin-user-panel");
+const adminUserSummaryGridElement = document.getElementById("admin-user-summary-grid");
+const adminUserStatusElement = document.getElementById("admin-user-status");
+const adminUserLedgerBodyElement = document.getElementById("admin-user-ledger-body");
+const adminUserRefreshButton = document.getElementById("admin-user-refresh-button");
+const adminUserCloseButton = document.getElementById("admin-user-close-button");
+const adminUserCreditDeltaInput = document.getElementById("admin-user-credit-delta");
+const adminUserAddCreditsButton = document.getElementById("admin-user-add-credits-button");
+const adminUserSubtractCreditsButton = document.getElementById("admin-user-subtract-credits-button");
 const adminBetsBodyElement = document.getElementById("admin-bets-body");
 const adminAddBetButton = document.getElementById("admin-add-bet-button");
 const adminSaveBetsButton = document.getElementById("admin-save-bets-button");
@@ -221,6 +230,9 @@ let adminPanelOpen = false;
 let adminPanelLoading = false;
 let adminOverview = null;
 let adminBetDefinitionsDraft = [];
+let adminSelectedUserAlias = "";
+let adminSelectedUserData = null;
+let adminUserLoading = false;
 let ledgerPanelOpen = false;
 let ledgerLoading = false;
 let ledgerData = null;
@@ -967,8 +979,16 @@ function renderAdminOverview() {
     </tr>
   `).join("");
 
+  adminUsersBodyElement.querySelectorAll("[data-admin-alias]").forEach((row) => {
+    row.addEventListener("click", () => {
+      const alias = row.getAttribute("data-admin-alias");
+      if (alias) void loadAdminUser(alias, true);
+    });
+  });
+
   adminBetDefinitionsDraft = cloneAdvancedBetDefinitions(betDefinitions.length ? betDefinitions : advancedBetDefinitions);
   renderAdminBetDefinitionsEditor();
+  renderAdminUserPanel();
 }
 
 async function loadAdminOverview(force = false) {
@@ -987,6 +1007,113 @@ async function loadAdminOverview(force = false) {
   } finally {
     adminPanelLoading = false;
     renderAdminOverview();
+  }
+}
+
+function renderAdminUserPanel() {
+  if (!adminUserPanelElement || !adminUserSummaryGridElement || !adminUserStatusElement || !adminUserLedgerBodyElement) return;
+  const visible = Boolean(adminSelectedUserAlias);
+  adminUserPanelElement.classList.toggle("hidden", !visible);
+  if (!visible) {
+    adminUserSummaryGridElement.innerHTML = "";
+    adminUserLedgerBodyElement.innerHTML = '<tr><td class="admin-table-empty" colspan="5">Pulsa sobre un usuario para abrir su ficha.</td></tr>';
+    adminUserStatusElement.textContent = "Pulsa sobre un usuario para ver su ficha completa.";
+    return;
+  }
+  if (adminUserLoading && !adminSelectedUserData) {
+    adminUserSummaryGridElement.innerHTML = "";
+    adminUserLedgerBodyElement.innerHTML = '<tr><td class="admin-table-empty" colspan="5">Cargando ficha del usuario...</td></tr>';
+    adminUserStatusElement.textContent = `Cargando ${adminSelectedUserAlias}...`;
+    return;
+  }
+  if (!adminSelectedUserData) {
+    adminUserSummaryGridElement.innerHTML = "";
+    adminUserLedgerBodyElement.innerHTML = '<tr><td class="admin-table-empty" colspan="5">No pude cargar la ficha del usuario.</td></tr>';
+    adminUserStatusElement.textContent = `No pude cargar ${adminSelectedUserAlias}.`;
+    return;
+  }
+  const user = adminSelectedUserData;
+  const summaryCards = [
+    { label: "Alias", value: user.alias },
+    { label: "Creditos", value: formatAdminNumber(user.credits) },
+    { label: "Partidas", value: formatAdminNumber(user.gamesPlayed) },
+    { label: "Apostado", value: formatAdminNumber(user.totalWagered || 0) },
+    { label: "Pagado", value: formatAdminNumber(user.totalPayout || 0) },
+    { label: "Mejor", value: formatAdminNumber(user.bestScore || 0) },
+  ];
+  adminUserSummaryGridElement.innerHTML = summaryCards.map((card) => `
+    <article class="admin-summary-card">
+      <small class="admin-summary-card-label">${escapeHtml(card.label)}</small>
+      <strong class="admin-summary-card-value">${escapeHtml(card.value)}</strong>
+    </article>
+  `).join("");
+  adminUserStatusElement.textContent = `${user.alias} · ultimo acceso ${formatAdminDate(user.lastSeen)} · actualizacion ${formatAdminDate(user.updatedAt)}.`;
+  const entries = Array.isArray(user.entries) ? user.entries : [];
+  if (!entries.length) {
+    adminUserLedgerBodyElement.innerHTML = '<tr><td class="admin-table-empty" colspan="5">Este usuario todavia no tiene movimientos.</td></tr>';
+    return;
+  }
+  adminUserLedgerBodyElement.innerHTML = entries.map((entry) => {
+    const amount = Number(entry.amount || 0);
+    const amountClass = amount >= 0 ? "ledger-positive" : "ledger-negative";
+    const amountText = `${amount >= 0 ? "+" : ""}${formatAdminNumber(amount)}`;
+    return `
+      <tr>
+        <td>${escapeHtml(formatAdminDate(entry.date))}</td>
+        <td>${escapeHtml(entry.type || "--")}</td>
+        <td>${escapeHtml(entry.detail || "--")}</td>
+        <td class="${amountClass}">${escapeHtml(amountText)}</td>
+        <td>${escapeHtml(formatAdminNumber(entry.balanceAfter || 0))}</td>
+      </tr>
+    `;
+  }).join("");
+}
+
+async function loadAdminUser(alias, force = false) {
+  if (!alias) return;
+  if (adminUserLoading && !force) return;
+  adminSelectedUserAlias = String(alias).toUpperCase();
+  adminUserLoading = true;
+  renderAdminUserPanel();
+  try {
+    adminSelectedUserData = await postWorkerJson("/admin/player", { alias: adminSelectedUserAlias });
+  } catch (error) {
+    adminSelectedUserData = null;
+    if (adminUserStatusElement) {
+      adminUserStatusElement.textContent = `No pude cargar la ficha: ${error.message}`;
+    }
+  } finally {
+    adminUserLoading = false;
+    renderAdminUserPanel();
+  }
+}
+
+function closeAdminUserPanel() {
+  adminSelectedUserAlias = "";
+  adminSelectedUserData = null;
+  adminUserLoading = false;
+  renderAdminUserPanel();
+}
+
+async function adjustAdminUserCredits(direction) {
+  if (!adminSelectedUserAlias) return;
+  const deltaBase = Math.max(1, Math.trunc(Number(adminUserCreditDeltaInput?.value || 0)));
+  const delta = direction === "subtract" ? -deltaBase : deltaBase;
+  try {
+    adminUserLoading = true;
+    renderAdminUserPanel();
+    adminSelectedUserData = await postWorkerJson("/admin/player/credits", {
+      alias: adminSelectedUserAlias,
+      delta,
+    });
+    void loadAdminOverview(true);
+  } catch (error) {
+    if (adminUserStatusElement) {
+      adminUserStatusElement.textContent = `No pude ajustar creditos: ${error.message}`;
+    }
+  } finally {
+    adminUserLoading = false;
+    renderAdminUserPanel();
   }
 }
 
@@ -4862,8 +4989,15 @@ showStatsButton?.addEventListener("click", () => {
   setStatsPanelOpen(true);
 });
 closeStatsButton?.addEventListener("click", () => setStatsPanelOpen(false));
-closeAdminButton?.addEventListener("click", () => setAdminPanelOpen(false));
+closeAdminButton?.addEventListener("click", () => {
+  closeAdminUserPanel();
+  setAdminPanelOpen(false);
+});
 refreshAdminButton?.addEventListener("click", () => { void loadAdminOverview(true); });
+adminUserRefreshButton?.addEventListener("click", () => { if (adminSelectedUserAlias) void loadAdminUser(adminSelectedUserAlias, true); });
+adminUserCloseButton?.addEventListener("click", () => closeAdminUserPanel());
+adminUserAddCreditsButton?.addEventListener("click", () => { void adjustAdminUserCredits("add"); });
+adminUserSubtractCreditsButton?.addEventListener("click", () => { void adjustAdminUserCredits("subtract"); });
 creditsElement?.addEventListener("click", () => { void loadLedger(); setLedgerPanelOpen(true); });
 creditsElement?.addEventListener("keydown", (event) => {
   if (event.key === "Enter" || event.key === " ") {
@@ -4991,3 +5125,4 @@ if (advancedMode) {
 if (!restoreSessionSnapshot()) {
   startAttractMode();
 }
+
