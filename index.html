@@ -79,6 +79,29 @@
       </div>
     </section>
 
+    <section id="advanced-auth-entry" class="advanced-auth-entry hidden" aria-labelledby="advanced-auth-title">
+      <div class="advanced-auth-card">
+        <button id="advanced-auth-x" type="button" class="stats-close-button advanced-auth-x" aria-label="Cerrar modo avanzado">X</button>
+        <p class="initials-eyebrow">Jugador avanzado</p>
+        <h3 id="advanced-auth-title">Acceso por Alias y PIN</h3>
+        <div class="advanced-auth-fields">
+          <label class="advanced-auth-field">
+            <span>Alias</span>
+            <input id="advanced-alias-input" type="text" maxlength="16" autocomplete="username" placeholder="Tu alias">
+          </label>
+          <label class="advanced-auth-field">
+            <span>PIN (4 cifras)</span>
+            <input id="advanced-pin-input" type="password" inputmode="numeric" maxlength="4" autocomplete="current-password" placeholder="0000">
+          </label>
+        </div>
+        <div class="advanced-auth-actions">
+          <button id="advanced-auth-submit" type="button">Entrar / Crear</button>
+          <button id="advanced-auth-close" type="button" class="danger-button">Cerrar</button>
+        </div>
+        <p class="advanced-auth-help">Si el alias no existe, se crea con 100 creditos. Si existe, el PIN debe coincidir para recuperar tu saldo en cualquier equipo.</p>
+      </div>
+    </section>
+
     <section id="advanced-bets-panel" class="advanced-bets-panel hidden" aria-labelledby="advanced-bets-title">
       <div class="advanced-bets-card">
         <div class="advanced-bets-header">
@@ -230,28 +253,6 @@
             <span id="initials-timer" class="initials-timer">01:00</span>
           </div>
           <p class="initials-help">Mueve el cursor por el alfabeto con las flechas y marca la letra como en una recreativa clasica.</p>
-        </div>
-      </section>
-      <section id="advanced-auth-entry" class="advanced-auth-entry hidden" aria-labelledby="advanced-auth-title">
-        <div class="advanced-auth-card">
-          <button id="advanced-auth-x" type="button" class="stats-close-button advanced-auth-x" aria-label="Cerrar modo avanzado">X</button>
-          <p class="initials-eyebrow">Modo avanzado</p>
-          <h3 id="advanced-auth-title">Alias y PIN</h3>
-          <div class="advanced-auth-fields">
-            <label class="advanced-auth-field">
-              <span>Alias</span>
-              <input id="advanced-alias-input" type="text" maxlength="16" autocomplete="username" placeholder="Tu alias">
-            </label>
-            <label class="advanced-auth-field">
-              <span>PIN (4 cifras)</span>
-              <input id="advanced-pin-input" type="password" inputmode="numeric" maxlength="4" autocomplete="current-password" placeholder="0000">
-            </label>
-          </div>
-          <div class="advanced-auth-actions">
-            <button id="advanced-auth-submit" type="button">Entrar / Crear</button>
-            <button id="advanced-auth-close" type="button" class="danger-button">Cerrar</button>
-          </div>
-          <p class="advanced-auth-help">Si el alias no existe, se crea con 100 creditos. Si existe, el PIN debe coincidir para recuperar tu saldo.</p>
         </div>
       </section>
       <section id="records-panel" class="records-panel records-panel-collapsed" aria-labelledby="records-title">
