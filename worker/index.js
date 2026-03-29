@@ -93,7 +93,7 @@ export default {
 
 function validatePayload(payload) {
   if (!payload || typeof payload !== "object") return "Payload is required";
-  if (!/^[A-Z]{3}$/.test(payload.initials || "")) return "Initials must be 3 letters";
+  if (!/^[A-Z?]{3}$/.test(payload.initials || "")) return "Initials must be 3 letters";
   if (!/^[0-9]+x[0-9]+$/.test(payload.mode || "")) return "Mode is invalid";
   if (!Number.isFinite(Number(payload.score)) || Number(payload.score) <= 0) return "Score is invalid";
   if (!payload.isoDate) return "Date is required";
@@ -160,3 +160,4 @@ function json(data, status, headers) {
     },
   });
 }
+

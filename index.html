@@ -90,6 +90,10 @@
             <div class="replay-arrow-shaft"></div>
             <div class="replay-arrow-head"></div>
           </div>
+          <div id="pause-overlay" class="pause-overlay hidden">
+            <span class="pause-title">PAUSA</span>
+            <span class="pause-subtitle">Pulsa SEGUIR para continuar</span>
+          </div>
           <div id="game-over-overlay" class="game-over-overlay hidden">
             <span class="game-over-title">GAME OVER</span>
             <span id="game-over-reason" class="game-over-reason"></span>
@@ -101,6 +105,20 @@
           </div>
           <button id="audio-toggle-button" type="button" class="secondary-button audio-toggle-button" aria-pressed="false">🔈 OFF</button>
           <button id="undo-toggle-button" type="button" class="undo-toggle-button">UNDO</button>
+          <button id="pause-button" type="button" class="pause-button">PAUSA</button>
+          <button id="save-game-button" type="button" class="save-game-button">Grabar Partida</button>
+          <section id="save-slots-panel" class="save-slots-panel hidden" aria-labelledby="save-slots-title">
+            <div class="save-slots-card">
+              <div class="save-slots-header">
+                <div>
+                  <p class="initials-eyebrow">Save Slots</p>
+                  <h3 id="save-slots-title">PARTIDAS</h3>
+                </div>
+                <button id="close-save-slots-button" type="button" class="secondary-button replay-close-button">Cerrar</button>
+              </div>
+              <div id="save-slots-list" class="save-slots-list"></div>
+            </div>
+          </section>
           <section id="undo-panel" class="undo-panel hidden" aria-labelledby="undo-title">
             <div class="undo-card">
               <div class="undo-header">
@@ -155,6 +173,7 @@
             <button id="select-letter-button" type="button">Marcar letra</button>
             <button id="delete-letter-button" type="button" class="secondary-button">Borrar letra</button>
             <button id="close-initials-button" type="button" class="danger-button">Cerrar</button>
+            <span id="initials-timer" class="initials-timer">01:00</span>
           </div>
           <p class="initials-help">Usa arriba y abajo para cambiar la letra. Marca la letra como en una recreativa clasica.</p>
         </div>

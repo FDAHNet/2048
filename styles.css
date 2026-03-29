@@ -846,6 +846,38 @@ button:hover {
   animation: replay-arrow-pop 260ms ease;
 }
 
+.pause-overlay {
+  position: absolute;
+  inset: 16px;
+  z-index: 4;
+  display: grid;
+  place-items: center;
+  gap: 18px;
+  border-radius: 28px;
+  border: 3px solid rgba(255, 214, 90, 0.72);
+  background: radial-gradient(circle, rgba(255, 221, 99, 0.14), rgba(26, 18, 0, 0.62));
+  color: #ffe58f;
+  font-family: "Press Start 2P", "Space Grotesk", sans-serif;
+  text-align: center;
+  text-shadow: 0 0 12px rgba(255, 214, 98, 0.34);
+}
+
+.pause-title,
+.pause-subtitle {
+  display: block;
+}
+
+.pause-title {
+  font-size: clamp(1.6rem, 4.8vw, 3.8rem);
+  letter-spacing: 0.14em;
+}
+
+.pause-subtitle {
+  font-size: clamp(0.75rem, 1.8vw, 1.1rem);
+  color: #fff5c5;
+  letter-spacing: 0.12em;
+}
+
 .game-over-overlay {
   position: absolute;
   inset: 16px;
@@ -904,7 +936,9 @@ button:hover {
 
 #finish-button,
 .audio-toggle-button,
-.undo-toggle-button {
+.undo-toggle-button,
+.pause-button,
+.save-game-button {
   min-width: 150px;
   text-align: center;
   align-self: flex-end;
@@ -936,6 +970,33 @@ button:hover {
   box-shadow: 0 10px 20px rgba(0, 0, 0, 0.16);
 }
 
+.pause-button {
+  margin-top: 12px;
+  padding: 9px 14px;
+  font-size: 0.82rem;
+  line-height: 1.1;
+  color: #132449;
+  background: linear-gradient(135deg, #c5deff, #94baff);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.16);
+}
+
+.pause-button.is-active {
+  color: #4b2c00;
+  background: linear-gradient(135deg, #ffe8a6, #ffc061);
+}
+
+.save-game-button {
+  margin-top: 12px;
+  padding: 9px 14px;
+  font-size: 0.82rem;
+  line-height: 1.1;
+  color: #3f173f;
+  background: linear-gradient(135deg, #ffd4ff, #dca7ff);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.16);
+}
+
 .undo-toggle-button:disabled {
   opacity: 0.55;
   filter: grayscale(0.2);
@@ -953,16 +1014,21 @@ button:hover {
   margin-top: 2px;
 }
 
-.undo-panel {
+.undo-panel,
+.save-slots-panel {
   width: 100%;
 }
 
 .side-actions.is-replay-mode .undo-toggle-button,
-.side-actions.is-replay-mode .undo-panel {
+.side-actions.is-replay-mode .undo-panel,
+.side-actions.is-replay-mode .pause-button,
+.side-actions.is-replay-mode .save-game-button,
+.side-actions.is-replay-mode .save-slots-panel {
   display: none;
 }
 
-.undo-card {
+.undo-card,
+.save-slots-card {
   padding: 14px;
   border-radius: 22px;
   background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(0,0,0,0.08));
@@ -970,18 +1036,21 @@ button:hover {
   box-shadow: 0 18px 36px rgba(0, 0, 0, 0.26);
 }
 
-.undo-header {
+.undo-header,
+.save-slots-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
 }
 
-.undo-header h3 {
+.undo-header h3,
+.save-slots-header h3 {
   margin: 0;
 }
 
-.undo-list {
+.undo-list,
+.save-slots-list {
   margin-top: 12px;
   display: grid;
   gap: 8px;
@@ -990,7 +1059,8 @@ button:hover {
   padding-right: 4px;
 }
 
-.undo-list::-webkit-scrollbar {
+.undo-list::-webkit-scrollbar,
+.save-slots-list::-webkit-scrollbar {
   width: 10px;
 }
 
@@ -1011,6 +1081,34 @@ button:hover {
   background: linear-gradient(135deg, rgba(255,255,255,0.08), rgba(255,255,255,0.03));
   color: var(--text);
   text-align: left;
+}
+
+.save-slot-entry {
+  display: grid;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: linear-gradient(135deg, rgba(255,255,255,0.08), rgba(255,255,255,0.03));
+}
+
+.save-slot-entry strong {
+  display: block;
+}
+
+.save-slot-entry small {
+  color: var(--muted);
+}
+
+.save-slot-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.save-slot-actions button {
+  padding: 8px 12px;
+  font-size: 0.76rem;
 }
 
 .undo-entry strong {
@@ -1217,7 +1315,28 @@ button:hover {
   display: flex;
   gap: 12px;
   margin-top: 16px;
+  align-items: center;
   flex-wrap: wrap;
+}
+
+.initials-timer {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 92px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #ffe58f;
+  font-family: "Press Start 2P", "Space Grotesk", sans-serif;
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
+}
+
+.initials-timer.is-warning {
+  color: #ff9898;
+  box-shadow: 0 0 18px rgba(255, 76, 76, 0.22);
 }
 
 .initials-help {

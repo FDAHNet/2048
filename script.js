@@ -9,11 +9,15 @@ const MAX_RECORDS_PER_MODE = 10;
 const PLAYER_INITIALS_KEY = "smooth-2048-player-initials";
 const AUDIO_ENABLED_KEY = "smooth-2048-audio-enabled";
 const THEME_KEY = "smooth-2048-theme";
+const SESSION_SNAPSHOT_KEY = "smooth-2048-session-snapshot";
+const SAVE_SLOTS_KEY = "smooth-2048-save-slots";
 const GITHUB_OWNER = "FDAHNet";
 const GITHUB_REPO = "2048";
 const GLOBAL_RECORD_LABEL = "record";
 const WORKER_API_URL = "https://angeloso-2048-records.mcdrer.workers.dev";
 const HOLE_SEQUENCE = ["h", "o", "l", "e"];
+const AUTOSAVE_INTERVAL_MS = 30 * 60 * 1000;
+const INITIALS_TIMEOUT_MS = 60 * 1000;
 
 const boardElement = document.getElementById("board");
 const fxLayer = document.getElementById("fx-layer");
@@ -27,9 +31,15 @@ const gameOverOverlayElement = document.getElementById("game-over-overlay");
 const gameOverReasonElement = document.getElementById("game-over-reason");
 const audioToggleButton = document.getElementById("audio-toggle-button");
 const undoToggleButton = document.getElementById("undo-toggle-button");
+const pauseButton = document.getElementById("pause-button");
+const saveGameButton = document.getElementById("save-game-button");
+const pauseOverlayElement = document.getElementById("pause-overlay");
 const undoPanelElement = document.getElementById("undo-panel");
 const closeUndoButton = document.getElementById("close-undo-button");
 const undoListElement = document.getElementById("undo-list");
+const saveSlotsPanelElement = document.getElementById("save-slots-panel");
+const closeSaveSlotsButton = document.getElementById("close-save-slots-button");
+const saveSlotsListElement = document.getElementById("save-slots-list");
 const replayIndicatorElement = document.getElementById("replay-indicator");
 const boardSizeSelect = document.getElementById("board-size");
 const recordsPanelElement = document.getElementById("records-panel");
@@ -65,6 +75,7 @@ const letterDownButton = document.getElementById("letter-down-button");
 const selectLetterButton = document.getElementById("select-letter-button");
 const deleteLetterButton = document.getElementById("delete-letter-button");
 const closeInitialsButton = document.getElementById("close-initials-button");
+const initialsTimerElement = document.getElementById("initials-timer");
 
 let boardSize = Number(boardSizeSelect.value);
 let nextTileId = 1;
@@ -103,10 +114,27 @@ let bestScoreBurstTimer = null;
 let gameTimerStartedAt = 0;
 let gameTimerInterval = null;
 let lastTimerMilestone = 0;
+let lastAutosaveMilestone = 0;
+let gamePaused = false;
+let pausedElapsedMs = 0;
 let moveHistory = [];
 let moveSequence = 0;
+let initialsTimerInterval = null;
+let saveSlotsPanelOpen = false;
 const ARCADE_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 const GLOBAL_MODES = ["4x4", "5x5", "6x6", "8x8"];
+const REPLAY_MOVE_CODES = {
+  up: "U",
+  right: "R",
+  down: "D",
+  left: "L",
+};
+const REPLAY_MOVE_CODES_REVERSE = {
+  U: "up",
+  R: "right",
+  D: "down",
+  L: "left",
+};
 const globalRecordsElements = Object.fromEntries(
   GLOBAL_MODES.map((mode) => [mode, document.getElementById(`global-records-list-${mode}`)])
 );
@@ -116,6 +144,7 @@ const initialsEntryState = {
   slot: 0,
   selectedIndex: 0,
   pendingScore: 0,
+  deadlineAt: 0,
 };
 
 function createEmptyState() {
@@ -149,13 +178,17 @@ function formatElapsedTime(ms) {
   return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 }
 
+function getElapsedMs() {
+  return gamePaused ? pausedElapsedMs : Date.now() - gameTimerStartedAt;
+}
+
 function renderGameTimer() {
   if (!gameTimerElement) return;
   if (replayMode) {
     gameTimerElement.textContent = "REPLAY";
     return;
   }
-  gameTimerElement.textContent = formatElapsedTime(Date.now() - gameTimerStartedAt);
+  gameTimerElement.textContent = formatElapsedTime(getElapsedMs());
 }
 
 function stopGameTimer() {
@@ -168,18 +201,22 @@ function stopGameTimer() {
 function startGameTimer() {
   stopGameTimer();
   gameTimerStartedAt = Date.now();
+  gamePaused = false;
+  pausedElapsedMs = 0;
   lastTimerMilestone = 0;
+  lastAutosaveMilestone = 0;
   renderGameTimer();
   gameTimerInterval = window.setInterval(() => {
-    if (replayMode || gameState.over || demoMode) return;
+    if (replayMode || gameState.over || demoMode || gamePaused) return;
     renderGameTimer();
     maybeCelebrateTimeMilestone();
+    maybeAutosaveSession();
   }, 250);
 }
 
 function maybeCelebrateTimeMilestone() {
-  if (replayMode || gameState.over || demoMode) return;
-  const elapsedMs = Date.now() - gameTimerStartedAt;
+  if (replayMode || gameState.over || demoMode || gamePaused) return;
+  const elapsedMs = getElapsedMs();
   const milestone = Math.floor(elapsedMs / 300000);
   if (milestone <= 0 || milestone === lastTimerMilestone) return;
   lastTimerMilestone = milestone;
@@ -224,6 +261,293 @@ function stopHoleMode(options = {}) {
   }
   if (!keepStatus && statusElement.textContent === "MODO H.O.L.E. Pulsa Espacio para parar.") {
     setStatus("");
+  }
+}
+
+function updatePauseButton() {
+  if (!pauseButton) return;
+  pauseButton.textContent = gamePaused ? "SEGUIR" : "PAUSA";
+  pauseButton.classList.toggle("is-active", gamePaused);
+}
+
+function setPauseOverlay(visible) {
+  pauseOverlayElement?.classList.toggle("hidden", !visible);
+}
+
+function clearSessionSnapshot() {
+  localStorage.removeItem(SESSION_SNAPSHOT_KEY);
+}
+
+function loadSaveSlots() {
+  try {
+    const raw = localStorage.getItem(SAVE_SLOTS_KEY);
+    const slots = raw ? JSON.parse(raw) : [];
+    return Array.isArray(slots) ? slots.slice(0, 4) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveSaveSlots(slots) {
+  localStorage.setItem(SAVE_SLOTS_KEY, JSON.stringify(slots.slice(0, 4)));
+}
+
+function maybeAutosaveSession(force = false) {
+  if (demoMode || replayMode || !attractDismissed) return;
+  if (!force) {
+    const milestone = Math.floor(getElapsedMs() / AUTOSAVE_INTERVAL_MS);
+    if (milestone <= 0 || milestone === lastAutosaveMilestone) return;
+    lastAutosaveMilestone = milestone;
+  }
+  persistSessionSnapshot();
+}
+
+function persistSessionSnapshot() {
+  if (demoMode || replayMode || !attractDismissed) return;
+
+  const snapshot = {
+    version: 1,
+    boardSize,
+    nextTileId,
+    gameState: cloneGameState(gameState),
+    currentReplay: currentReplay ? encodeReplayPayload(currentReplay) : null,
+    journalEntries: cloneJournalEntries(journalEntries),
+    moveSequence,
+    gameTimerElapsedMs: getElapsedMs(),
+    globalRecordFanfarePlayed,
+    recordLeaderActive: bestScoreCardElement?.classList.contains("record-leader") || false,
+    paused: gamePaused,
+    statusText: statusElement.textContent,
+    initialsEntry: initialsEntryState.active ? {
+      letters: initialsEntryState.letters.slice(),
+      slot: initialsEntryState.slot,
+      selectedIndex: initialsEntryState.selectedIndex,
+      pendingScore: initialsEntryState.pendingScore,
+      remainingMs: Math.max(0, initialsEntryState.deadlineAt - Date.now()),
+    } : null,
+  };
+
+  try {
+    localStorage.setItem(SESSION_SNAPSHOT_KEY, JSON.stringify(snapshot));
+  } catch {
+    try {
+      snapshot.currentReplay = null;
+      snapshot.replayTruncated = true;
+      localStorage.setItem(SESSION_SNAPSHOT_KEY, JSON.stringify(snapshot));
+    } catch {
+      // Ignore quota issues here; final record save has its own fallback path.
+    }
+  }
+}
+
+function buildCheckpointReplayFromCurrentBoard() {
+  const start = [];
+  for (let row = 0; row < boardSize; row += 1) {
+    for (let col = 0; col < boardSize; col += 1) {
+      const tile = gameState.cells[row][col];
+      if (!tile) continue;
+      start.push({ row, col, value: tile.value });
+    }
+  }
+
+  return {
+    version: 1,
+    boardSize,
+    mode: `${boardSize}x${boardSize}`,
+    startedAt: new Date().toISOString(),
+    start,
+    turns: [],
+  };
+}
+
+function renderInitialsTimer() {
+  if (!initialsTimerElement) return;
+  const remainingMs = Math.max(0, initialsEntryState.deadlineAt - Date.now());
+  const minutes = Math.floor(remainingMs / 60000);
+  const seconds = Math.floor((remainingMs % 60000) / 1000);
+  initialsTimerElement.textContent = `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+  initialsTimerElement.classList.toggle("is-warning", remainingMs <= 10000);
+}
+
+function stopInitialsTimer() {
+  if (initialsTimerInterval) {
+    window.clearInterval(initialsTimerInterval);
+    initialsTimerInterval = null;
+  }
+}
+
+function startInitialsTimer() {
+  stopInitialsTimer();
+  renderInitialsTimer();
+  initialsTimerInterval = window.setInterval(() => {
+    renderInitialsTimer();
+    if (Date.now() >= initialsEntryState.deadlineAt) {
+      stopInitialsTimer();
+      savePendingRecord("???");
+    }
+  }, 250);
+}
+
+function setGamePaused(nextPaused, options = {}) {
+  const { statusMessage = nextPaused ? "Partida en pausa." : "Partida reanudada.", persist = true } = options;
+  if (nextPaused === gamePaused) return;
+
+  if (nextPaused) {
+    pausedElapsedMs = getElapsedMs();
+    gamePaused = true;
+    stopGameTimer();
+    setPauseOverlay(true);
+    setStatus(statusMessage);
+    updatePauseButton();
+    if (persist) persistSessionSnapshot();
+    return;
+  }
+
+  gamePaused = false;
+  gameTimerStartedAt = Date.now() - pausedElapsedMs;
+  setPauseOverlay(false);
+  updatePauseButton();
+  renderGameTimer();
+  gameTimerInterval = window.setInterval(() => {
+    if (replayMode || gameState.over || demoMode || gamePaused) return;
+    renderGameTimer();
+    maybeCelebrateTimeMilestone();
+    maybeAutosaveSession();
+  }, 250);
+  setStatus(statusMessage);
+  if (persist) persistSessionSnapshot();
+}
+
+function setSaveSlotsPanelOpen(nextOpen) {
+  saveSlotsPanelOpen = nextOpen;
+  saveSlotsPanelElement?.classList.toggle("hidden", !saveSlotsPanelOpen);
+  if (saveSlotsPanelOpen) {
+    renderSaveSlots();
+  }
+}
+
+function buildPlayableSnapshot() {
+  return {
+    version: 1,
+    boardSize,
+    nextTileId,
+    gameState: cloneGameState(gameState),
+    currentReplay: currentReplay ? encodeReplayPayload(currentReplay) : null,
+    journalEntries: cloneJournalEntries(journalEntries),
+    moveSequence,
+    gameTimerElapsedMs: getElapsedMs(),
+    globalRecordFanfarePlayed,
+    recordLeaderActive: bestScoreCardElement?.classList.contains("record-leader") || false,
+    statusText: statusElement.textContent,
+  };
+}
+
+function saveGameToSlot(slotIndex) {
+  const now = new Date();
+  const slots = loadSaveSlots();
+  slots[slotIndex] = {
+    slot: slotIndex,
+    savedAt: now.toISOString(),
+    displayDate: new Intl.DateTimeFormat("es-ES", {
+      dateStyle: "short",
+      timeStyle: "short",
+    }).format(now),
+    score: gameState.score,
+    moves: moveSequence,
+    mode: `${boardSize}x${boardSize}`,
+    snapshot: buildPlayableSnapshot(),
+  };
+  saveSaveSlots(slots);
+  renderSaveSlots();
+  persistSessionSnapshot();
+  setStatus(`Partida guardada en Slot ${slotIndex + 1}.`);
+}
+
+function restorePlayableSnapshot(snapshot) {
+  attractDismissed = true;
+  attractOverlayElement.classList.add("hidden");
+  stopDemoMode();
+  stopHoleMode({ keepStatus: true });
+  discardReplayState();
+
+  boardSize = Number(snapshot.boardSize || boardSize);
+  boardSizeSelect.value = String(boardSize);
+  nextTileId = Number(snapshot.nextTileId || 0);
+  gameState = cloneGameState(snapshot.gameState);
+  currentReplay = decodeReplayPayload(snapshot.currentReplay) || buildCheckpointReplayFromCurrentBoard();
+  journalEntries = cloneJournalEntries(snapshot.journalEntries || []);
+  moveSequence = Number(snapshot.moveSequence || 0);
+  moveHistory = [];
+  globalRecordFanfarePlayed = Boolean(snapshot.globalRecordFanfarePlayed);
+  pausedElapsedMs = Number(snapshot.gameTimerElapsedMs || 0);
+  gamePaused = true;
+  gameSessionId += 1;
+
+  buildGrid();
+  clearBestScoreCelebration();
+  if (snapshot.recordLeaderActive) {
+    bestScoreCardElement?.classList.add("record-leader");
+  }
+
+  render();
+  renderJournal();
+  renderUndoHistory();
+  renderRecords();
+  renderGameTimer();
+  setPauseOverlay(true);
+  updatePauseButton();
+  setStatus(snapshot.statusText || "Partida cargada. Pulsa SEGUIR.");
+  persistSessionSnapshot();
+}
+
+function loadGameFromSlot(slotIndex) {
+  const slot = loadSaveSlots()[slotIndex];
+  if (!slot?.snapshot) return;
+  closeInitialsEntry({ discard: true });
+  restorePlayableSnapshot(slot.snapshot);
+  setSaveSlotsPanelOpen(false);
+  setStatus(`Slot ${slotIndex + 1} cargado. Pulsa SEGUIR.`);
+}
+
+function renderSaveSlots() {
+  if (!saveSlotsListElement) return;
+  const slots = loadSaveSlots();
+  saveSlotsListElement.innerHTML = "";
+
+  for (let index = 0; index < 4; index += 1) {
+    const slot = slots[index];
+    const entry = document.createElement("div");
+    entry.className = "save-slot-entry";
+
+    const title = document.createElement("strong");
+    title.textContent = `Slot ${index + 1}`;
+
+    const meta = document.createElement("small");
+    meta.textContent = slot
+      ? `${slot.mode} | ${slot.score} puntos | ${slot.moves} movimientos | ${slot.displayDate}`
+      : "Vacio";
+
+    const actions = document.createElement("div");
+    actions.className = "save-slot-actions";
+
+    const saveButton = document.createElement("button");
+    saveButton.type = "button";
+    saveButton.className = "secondary-button";
+    saveButton.textContent = slot ? "Sobrescribir" : "Guardar";
+    saveButton.addEventListener("click", () => saveGameToSlot(index));
+
+    actions.appendChild(saveButton);
+
+    if (slot) {
+      const loadButton = document.createElement("button");
+      loadButton.type = "button";
+      loadButton.textContent = "Cargar";
+      loadButton.addEventListener("click", () => loadGameFromSlot(index));
+      actions.appendChild(loadButton);
+    }
+
+    entry.append(title, meta, actions);
+    saveSlotsListElement.appendChild(entry);
   }
 }
 
@@ -399,6 +723,7 @@ function startGame(options = {}) {
   stopDemoMode();
   stopHoleMode({ keepStatus: true });
   setGameOverOverlay(false);
+  setPauseOverlay(false);
   demoMode = demo;
   boardSize = Number(boardSizeSelect.value);
   nextTileId = 0;
@@ -415,6 +740,7 @@ function startGame(options = {}) {
   globalRecordFanfarePlayed = false;
   globalRecordsLoaded = false;
   clearBestScoreCelebration();
+  updatePauseButton();
   startGameTimer();
   gameState = createEmptyState();
   buildGrid();
@@ -435,11 +761,88 @@ function startGame(options = {}) {
   renderUndoHistory();
   renderRecords();
   if (!demoMode) {
+    clearSessionSnapshot();
+  }
+  if (!demoMode) {
     renderGlobalRecordsLoading();
     fetchGlobalRecords();
   }
   setStatus(demoMode ? "MODO DEMO" : "");
   if (demoMode) scheduleDemoMove();
+}
+
+function restoreSessionSnapshot() {
+  const raw = localStorage.getItem(SESSION_SNAPSHOT_KEY);
+  if (!raw) return false;
+
+  try {
+    const snapshot = JSON.parse(raw);
+    if (!snapshot?.gameState || snapshot.gameState.over) {
+      clearSessionSnapshot();
+      return false;
+    }
+
+    attractDismissed = true;
+    attractOverlayElement.classList.add("hidden");
+    stopDemoMode();
+    stopHoleMode({ keepStatus: true });
+    discardReplayState();
+
+    boardSize = Number(snapshot.boardSize || boardSize);
+    boardSizeSelect.value = String(boardSize);
+    nextTileId = Number(snapshot.nextTileId || 0);
+    gameState = cloneGameState(snapshot.gameState);
+    currentReplay = decodeReplayPayload(snapshot.currentReplay);
+    journalEntries = cloneJournalEntries(snapshot.journalEntries || []);
+    moveSequence = Number(snapshot.moveSequence || 0);
+    moveHistory = [];
+    globalRecordFanfarePlayed = Boolean(snapshot.globalRecordFanfarePlayed);
+    pausedElapsedMs = Number(snapshot.gameTimerElapsedMs || 0);
+    gamePaused = true;
+    gameSessionId += 1;
+
+    buildGrid();
+    clearBestScoreCelebration();
+    if (snapshot.recordLeaderActive) {
+      bestScoreCardElement?.classList.add("record-leader");
+    }
+
+    render();
+    renderJournal();
+    renderUndoHistory();
+    renderRecords();
+    renderGameTimer();
+    setPauseOverlay(true);
+    updatePauseButton();
+    if (!currentReplay) {
+      currentReplay = buildCheckpointReplayFromCurrentBoard();
+    }
+    setStatus(
+      snapshot.replayTruncated
+        ? "Partida recuperada desde el ultimo punto seguro. Pulsa SEGUIR."
+        : (snapshot.statusText || "Partida recuperada. Pulsa SEGUIR.")
+    );
+
+    if (snapshot.initialsEntry?.pendingScore) {
+      initialsEntryState.active = true;
+      initialsEntryState.letters = Array.isArray(snapshot.initialsEntry.letters) ? snapshot.initialsEntry.letters.slice(0, 3) : ["", "", ""];
+      initialsEntryState.slot = Number(snapshot.initialsEntry.slot || 0);
+      initialsEntryState.selectedIndex = Number(snapshot.initialsEntry.selectedIndex || 0);
+      initialsEntryState.pendingScore = Number(snapshot.initialsEntry.pendingScore || 0);
+      initialsEntryState.deadlineAt = Date.now() + Math.max(1000, Number(snapshot.initialsEntry.remainingMs || INITIALS_TIMEOUT_MS));
+      renderInitialsEntry();
+      initialsEntryElement.classList.remove("hidden");
+      startInitialsTimer();
+    }
+
+    renderGlobalRecordsLoading();
+    fetchGlobalRecords();
+    persistSessionSnapshot();
+    return true;
+  } catch {
+    clearSessionSnapshot();
+    return false;
+  }
 }
 
 function setRecordsPanelOpen(nextOpen) {
@@ -748,6 +1151,62 @@ function cloneReplay(replay) {
   };
 }
 
+function encodeReplayPayload(replay, options = {}) {
+  if (!replay) return null;
+  const {
+    finishedAt = replay.finishedAt || null,
+    finalScore = replay.finalScore ?? null,
+    initials = replay.initials || null,
+  } = options;
+
+  return {
+    version: 2,
+    boardSize: replay.boardSize,
+    mode: replay.mode,
+    startedAt: replay.startedAt,
+    finishedAt,
+    finalScore,
+    initials,
+    start: (replay.start || []).map((spawn) => [spawn.row, spawn.col, spawn.value]),
+    turns: (replay.turns || []).map((turn) => [
+      REPLAY_MOVE_CODES[turn.move] || "U",
+      turn.spawn?.row ?? -1,
+      turn.spawn?.col ?? -1,
+      turn.spawn?.value ?? 0,
+    ]),
+  };
+}
+
+function decodeReplayPayload(replay) {
+  if (!replay || typeof replay !== "object") return null;
+  if (replay.version !== 2) return cloneReplay(replay);
+
+  return {
+    version: replay.version,
+    boardSize: replay.boardSize,
+    mode: replay.mode,
+    startedAt: replay.startedAt,
+    finishedAt: replay.finishedAt || null,
+    finalScore: replay.finalScore ?? null,
+    initials: replay.initials || null,
+    start: (replay.start || []).map((spawn) => ({
+      row: Number(spawn[0]),
+      col: Number(spawn[1]),
+      value: Number(spawn[2]),
+    })),
+    turns: (replay.turns || []).map((turn) => ({
+      move: REPLAY_MOVE_CODES_REVERSE[turn[0]] || "up",
+      spawn: turn[1] >= 0
+        ? {
+            row: Number(turn[1]),
+            col: Number(turn[2]),
+            value: Number(turn[3]),
+          }
+        : null,
+    })),
+  };
+}
+
 function cloneJournalEntries(entries) {
   return entries.map((entry) => ({ ...entry }));
 }
@@ -768,8 +1227,20 @@ function saveRecords(records) {
   localStorage.setItem(getRecordsKey(), JSON.stringify(records));
 }
 
+function saveRecordsWithFallback(records) {
+  const limited = records.slice(0, MAX_RECORDS_PER_MODE);
+  try {
+    saveRecords(limited);
+    return { replayStored: true };
+  } catch {
+    const withoutReplay = limited.map((record) => ({ ...record, replay: null }));
+    saveRecords(withoutReplay);
+    return { replayStored: false };
+  }
+}
+
 function resolveReplayForRecord(record) {
-  if (record?.replay) return record.replay;
+  if (record?.replay) return decodeReplayPayload(record.replay);
   if (
     pendingGlobalRecord
     && pendingGlobalRecord.replay
@@ -777,7 +1248,7 @@ function resolveReplayForRecord(record) {
     && pendingGlobalRecord.score === record.score
     && pendingGlobalRecord.mode === record.mode
   ) {
-    return pendingGlobalRecord.replay;
+    return decodeReplayPayload(pendingGlobalRecord.replay);
   }
   return null;
 }
@@ -1146,7 +1617,13 @@ function getTopScoreForMode(mode) {
 
 function mergeGlobalRecordIntoCache(record) {
   if (!record?.mode || !globalRecordsCache[record.mode]) return;
-  const merged = [...globalRecordsCache[record.mode], record];
+  const merged = [
+    ...globalRecordsCache[record.mode],
+    {
+      ...record,
+      replay: decodeReplayPayload(record.replay),
+    },
+  ];
   merged.sort((left, right) => {
     if (right.score !== left.score) return right.score - left.score;
     return left.isoDate.localeCompare(right.isoDate);
@@ -1157,7 +1634,7 @@ function mergeGlobalRecordIntoCache(record) {
 
 function parseGlobalRecord(issue) {
   const body = issue.body || "";
-  const initials = body.match(/Initials:\s*([A-Z]{3})/i)?.[1]?.toUpperCase();
+  const initials = body.match(/Initials:\s*([A-Z?]{3})/i)?.[1]?.toUpperCase();
   const mode = body.match(/Mode:\s*([0-9]+x[0-9]+)/i)?.[1];
   const scoreText = body.match(/Score:\s*([0-9]+)/i)?.[1];
   const replayMatch = body.match(/```json\s*([\s\S]*?)```/i);
@@ -1169,7 +1646,7 @@ function parseGlobalRecord(issue) {
   let replay = null;
   if (replayMatch?.[1]) {
     try {
-      replay = JSON.parse(replayMatch[1]);
+      replay = decodeReplayPayload(JSON.parse(replayMatch[1]));
     } catch {
       replay = null;
     }
@@ -1227,7 +1704,7 @@ async function fetchReplayForRecord(record) {
 
   if (!chunks.length || chunks.length < record.replayParts) return null;
 
-  const replay = JSON.parse(chunks.map((chunk) => chunk.chunk).join(""));
+  const replay = decodeReplayPayload(JSON.parse(chunks.map((chunk) => chunk.chunk).join("")));
   record.replay = replay;
   return replay;
 }
@@ -1278,7 +1755,7 @@ async function fetchGlobalRecords() {
 function normalizeInitials(value) {
   return (value || "")
     .toUpperCase()
-    .replace(/[^A-Z]/g, "")
+    .replace(/[^A-Z?]/g, "")
     .slice(0, 3);
 }
 
@@ -1288,23 +1765,33 @@ function openInitialsEntry(score) {
   initialsEntryState.active = true;
   initialsEntryState.letters = ["", "", ""];
   initialsEntryState.slot = 0;
-  initialsEntryState.selectedIndex = ARCADE_ALPHABET.indexOf(previous[0] || "A");
+  initialsEntryState.selectedIndex = Math.max(0, ARCADE_ALPHABET.indexOf(previous[0] || "A"));
   initialsEntryState.pendingScore = score;
+  initialsEntryState.deadlineAt = Date.now() + INITIALS_TIMEOUT_MS;
   renderInitialsEntry();
   initialsEntryElement.classList.remove("hidden");
+  startInitialsTimer();
+  persistSessionSnapshot();
   setStatus("Nuevo record. Introduce tus iniciales.");
 }
 
 function closeInitialsEntry(options = {}) {
   const { discard = false } = options;
+  stopInitialsTimer();
   initialsEntryState.active = false;
   initialsEntryState.letters = ["", "", ""];
   initialsEntryState.slot = 0;
   initialsEntryState.selectedIndex = 0;
   initialsEntryState.pendingScore = 0;
+  initialsEntryState.deadlineAt = 0;
   initialsEntryElement.classList.add("hidden");
+  if (initialsTimerElement) {
+    initialsTimerElement.textContent = "01:00";
+    initialsTimerElement.classList.remove("is-warning");
+  }
   if (discard) {
     recordSaved = true;
+    clearSessionSnapshot();
     setStatus("Anotacion cancelada.");
   }
 }
@@ -1335,22 +1822,22 @@ function shiftCurrentLetter(step) {
   const total = ARCADE_ALPHABET.length;
   initialsEntryState.selectedIndex = (initialsEntryState.selectedIndex + step + total) % total;
   renderInitialsEntry();
+  persistSessionSnapshot();
 }
 
-function savePendingRecord() {
-  const initials = initialsEntryState.letters.join("");
+function savePendingRecord(forcedInitials = null) {
+  const initials = normalizeInitials(forcedInitials || initialsEntryState.letters.join("") || "???").padEnd(3, "?");
   const now = new Date();
   const displayDate = new Intl.DateTimeFormat("es-ES", {
     dateStyle: "short",
     timeStyle: "short",
   }).format(now);
   const replayPayload = currentReplay
-    ? {
-        ...currentReplay,
+    ? encodeReplayPayload(currentReplay, {
         finishedAt: now.toISOString(),
         finalScore: initialsEntryState.pendingScore,
         initials,
-      }
+      })
     : null;
 
   const records = loadRecords();
@@ -1368,7 +1855,7 @@ function savePendingRecord() {
     return left.isoDate.localeCompare(right.isoDate);
   });
 
-  saveRecords(records.slice(0, MAX_RECORDS_PER_MODE));
+  const localSaveResult = saveRecordsWithFallback(records);
   localStorage.setItem(PLAYER_INITIALS_KEY, initials);
   recordSaved = true;
   pendingGlobalRecord = {
@@ -1383,11 +1870,18 @@ function savePendingRecord() {
   const isGlobalTopScore = pendingGlobalRecord.score > currentTopScore;
   closeInitialsEntry();
   renderRecords();
-  setStatus(isGlobalTopScore ? "Nuevo record global." : "Record guardado.");
+  setStatus(
+    isGlobalTopScore
+      ? "Nuevo record global."
+      : localSaveResult.replayStored
+        ? "Record guardado."
+        : "Record guardado sin replay local."
+  );
   playApplause();
   if (isGlobalTopScore && !globalRecordFanfarePlayed) {
     window.setTimeout(() => playGlobalRecordFanfare(), 900);
   }
+  clearSessionSnapshot();
   submitGlobalRecord();
 }
 
@@ -1510,6 +2004,7 @@ function discardReplayState() {
   boardFrame.classList.remove("is-replay", "replay-wipe");
   renderGameTimer();
   renderJournal();
+  setSaveSlotsPanelOpen(false);
 }
 
 function setReplayVisualState(active) {
@@ -1831,6 +2326,7 @@ function commitCurrentLetter() {
   initialsEntryState.slot += 1;
   initialsEntryState.selectedIndex = 0;
   renderInitialsEntry();
+  persistSessionSnapshot();
 }
 
 function deleteLastLetter() {
@@ -1843,6 +2339,7 @@ function deleteLastLetter() {
   initialsEntryState.letters[initialsEntryState.slot] = "";
   initialsEntryState.selectedIndex = 0;
   renderInitialsEntry();
+  persistSessionSnapshot();
 }
 
 function maybePersistCurrentScore() {
@@ -1858,7 +2355,7 @@ function maybePersistCurrentScore() {
 
 function finishGame() {
   if (demoMode) return;
-  if (gameState.over || isAnimating || initialsEntryState.active) return;
+  if (gameState.over || isAnimating || initialsEntryState.active || gamePaused) return;
   stopHoleMode({ keepStatus: true });
   gameState.over = true;
   renderGameTimer();
@@ -1928,7 +2425,7 @@ function scheduleEpicEffect(tile) {
 
 function move(direction) {
   void unlockAudio();
-  if (gameState.over || isAnimating || initialsEntryState.active || replayMode) {
+  if (gameState.over || isAnimating || initialsEntryState.active || replayMode || gamePaused) {
     if (demoMode && gameState.over) scheduleDemoMove();
     return;
   }
@@ -2039,6 +2536,7 @@ function move(direction) {
     render();
     maybeCelebrateLiveGlobalRecord();
     pushHistoryEntry(direction);
+    persistSessionSnapshot();
 
     epicBursts.forEach((entry) => createEpicBurst(entry.row, entry.col, entry.value));
     epicBursts
@@ -2305,6 +2803,13 @@ function toggleAudioEnabled() {
 }
 
 function handleKeydown(event) {
+  if (gamePaused) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      setGamePaused(false);
+    }
+    return;
+  }
   if (holeMode && event.key === " ") {
     event.preventDefault();
     stopHoleMode();
@@ -2417,6 +2922,7 @@ function handleKeydown(event) {
 
 function handleTouchStart(event) {
   if (!attractDismissed) startActualGame();
+  if (gamePaused) return;
   void unlockAudio();
   const touch = event.changedTouches[0];
   touchStart = { x: touch.clientX, y: touch.clientY };
@@ -2424,6 +2930,10 @@ function handleTouchStart(event) {
 
 function handleTouchEnd(event) {
   if (!touchStart) return;
+  if (gamePaused) {
+    touchStart = null;
+    return;
+  }
   if (holeMode) {
     touchStart = null;
     return;
@@ -2468,7 +2978,16 @@ boardSizeSelect.addEventListener("change", () => {
 finishButton.addEventListener("click", finishGame);
 audioToggleButton.addEventListener("click", toggleAudioEnabled);
 undoToggleButton.addEventListener("click", () => setUndoPanelOpen(!undoPanelOpen));
+pauseButton.addEventListener("click", () => {
+  if (demoMode || replayMode || initialsEntryState.active || gameState.over) return;
+  setGamePaused(!gamePaused);
+});
+saveGameButton.addEventListener("click", () => {
+  if (demoMode || replayMode || initialsEntryState.active) return;
+  setSaveSlotsPanelOpen(!saveSlotsPanelOpen);
+});
 closeUndoButton.addEventListener("click", () => setUndoPanelOpen(false));
+closeSaveSlotsButton.addEventListener("click", () => setSaveSlotsPanelOpen(false));
 startAttractButton.addEventListener("click", startActualGame);
 themeSelect.addEventListener("change", (event) => applyTheme(event.target.value));
 letterUpButton.addEventListener("pointerdown", () => { if (audioEnabled) void unlockAudio(); });
@@ -2514,6 +3033,10 @@ window.addEventListener("resize", render);
 buildGrid();
 applyTheme(theme);
 updateAudioToggleButton();
+updatePauseButton();
 setRecordsPanelOpen(false);
 closeInitialsEntry();
-startAttractMode();
+renderSaveSlots();
+if (!restoreSessionSnapshot()) {
+  startAttractMode();
+}
