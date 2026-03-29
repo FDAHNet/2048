@@ -1,30 +1,65 @@
 const GITHUB_OWNER = 'FDAHNet';
 const GITHUB_REPO = '2048';
 const GITHUB_LABEL = 'record';
-const MAX_ISSUE_BODY = 62000;
-const MAX_REPLAY_CHUNK = 56000;
+const DEFAULT_ALLOWED_ORIGIN = 'https://fdahnet.github.io';
+const DEFAULT_ALLOWED_REFERER_PREFIX = 'https://fdahnet.github.io/2048';
+const ALLOWED_MODES = new Set(['4x4', '5x5', '6x6', '8x8']);
+const ALLOWED_REPLAY_VERSIONS = new Set([1, 2]);
+const MAX_REQUEST_BYTES = 4_000_000;
+const MAX_ISSUE_BODY = 62_000;
+const MAX_REPLAY_CHUNK = 56_000;
+const MAX_REPLAY_PARTS = 180;
+const MAX_SCORE = 1_000_000_000_000;
+const MAX_REPLAY_TURNS = 600_000;
 
 export default {
   async fetch(request, env) {
-    const corsHeaders = {
-      "Access-Control-Allow-Origin": env.ALLOWED_ORIGIN || "*",
-      "Access-Control-Allow-Methods": "POST, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type",
-    };
+    const allowedOrigin = env.ALLOWED_ORIGIN || DEFAULT_ALLOWED_ORIGIN;
+    const allowedRefererPrefix = env.ALLOWED_REFERER_PREFIX || DEFAULT_ALLOWED_REFERER_PREFIX;
+    const origin = request.headers.get('Origin') || '';
+    const referer = request.headers.get('Referer') || '';
+    const corsHeaders = getCorsHeaders(origin, allowedOrigin);
 
-    if (request.method === "OPTIONS") {
+    if (request.method === 'OPTIONS') {
+      if (!isAllowedOrigin(origin, allowedOrigin)) {
+        return json({ error: 'Origin not allowed' }, 403, corsHeaders);
+      }
       return new Response(null, { status: 204, headers: corsHeaders });
     }
 
-    if (request.method !== "POST") {
-      return json({ error: "Method not allowed" }, 405, corsHeaders);
+    if (request.method !== 'POST') {
+      return json({ error: 'Method not allowed' }, 405, corsHeaders);
+    }
+
+    if (!isAllowedBrowserRequest(origin, referer, allowedOrigin, allowedRefererPrefix)) {
+      return json({ error: 'Origin or referer not allowed' }, 403, corsHeaders);
+    }
+
+    const contentType = request.headers.get('Content-Type') || '';
+    if (!contentType.toLowerCase().includes('application/json')) {
+      return json({ error: 'Content-Type must be application/json' }, 415, corsHeaders);
+    }
+
+    let rawBody = '';
+    try {
+      rawBody = await request.text();
+    } catch {
+      return json({ error: 'Unable to read request body' }, 400, corsHeaders);
+    }
+
+    if (!rawBody) {
+      return json({ error: 'Payload is required' }, 400, corsHeaders);
+    }
+
+    if (new TextEncoder().encode(rawBody).length > MAX_REQUEST_BYTES) {
+      return json({ error: 'Payload too large' }, 413, corsHeaders);
     }
 
     let payload;
     try {
-      payload = await request.json();
+      payload = JSON.parse(rawBody);
     } catch {
-      return json({ error: "Invalid JSON" }, 400, corsHeaders);
+      return json({ error: 'Invalid JSON' }, 400, corsHeaders);
     }
 
     const validation = validatePayload(payload);
@@ -36,8 +71,8 @@ export default {
       const title = `[Record] ${payload.initials} - ${payload.score} - ${payload.mode}`;
       const replayJson = JSON.stringify(payload.replay);
       const baseLines = [
-        "New global score submission",
-        "",
+        'New global score submission',
+        '',
         `Initials: ${payload.initials}`,
         `Mode: ${payload.mode}`,
         `Score: ${payload.score}`,
@@ -46,15 +81,15 @@ export default {
 
       const inlineBody = [
         ...baseLines,
-        "",
-        "Replay Storage: inline",
-        "Replay Parts: 1",
-        "",
-        "Replay JSON:",
-        "```json",
+        '',
+        'Replay Storage: inline',
+        'Replay Parts: 1',
+        '',
+        'Replay JSON:',
+        '```json',
         replayJson,
-        "```",
-      ].join("\n");
+        '```',
+      ].join('\n');
 
       let issue;
 
@@ -62,43 +97,124 @@ export default {
         issue = await createIssue(env, title, inlineBody);
       } else {
         const chunks = chunkString(replayJson, MAX_REPLAY_CHUNK);
+        if (chunks.length > MAX_REPLAY_PARTS) {
+          return json({ error: 'Replay too large to store safely' }, 413, corsHeaders);
+        }
+
         const issueBody = [
           ...baseLines,
-          "",
-          "Replay Storage: comments",
+          '',
+          'Replay Storage: comments',
           `Replay Parts: ${chunks.length}`,
-          "",
-          "Replay JSON is stored across issue comments.",
-        ].join("\n");
+          '',
+          'Replay JSON is stored across issue comments.',
+        ].join('\n');
 
         issue = await createIssue(env, title, issueBody);
 
         for (let index = 0; index < chunks.length; index += 1) {
           const commentBody = [
             `Replay Part ${index + 1}/${chunks.length}`,
-            "```json",
+            '```json',
             chunks[index],
-            "```",
-          ].join("\n");
+            '```',
+          ].join('\n');
           await createIssueComment(env, issue.number, commentBody);
         }
       }
 
       return json({ ok: true, issueUrl: issue.html_url }, 200, corsHeaders);
     } catch (error) {
-      return json({ error: "GitHub issue creation failed", details: error.message || String(error) }, 502, corsHeaders);
+      return json({ error: 'GitHub issue creation failed', details: error.message || String(error) }, 502, corsHeaders);
     }
   },
 };
 
+function isAllowedOrigin(origin, allowedOrigin) {
+  return Boolean(origin) && origin === allowedOrigin;
+}
+
+function isAllowedBrowserRequest(origin, referer, allowedOrigin, allowedRefererPrefix) {
+  return isAllowedOrigin(origin, allowedOrigin)
+    && typeof referer === 'string'
+    && referer.startsWith(allowedRefererPrefix);
+}
+
+function getCorsHeaders(origin, allowedOrigin) {
+  const allowOrigin = isAllowedOrigin(origin, allowedOrigin) ? origin : allowedOrigin;
+  return {
+    'Access-Control-Allow-Origin': allowOrigin,
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type',
+    'Vary': 'Origin',
+  };
+}
+
 function validatePayload(payload) {
-  if (!payload || typeof payload !== "object") return "Payload is required";
-  if (!/^[A-Z?]{3}$/.test(payload.initials || "")) return "Initials must be 3 letters";
-  if (!/^[0-9]+x[0-9]+$/.test(payload.mode || "")) return "Mode is invalid";
-  if (!Number.isFinite(Number(payload.score)) || Number(payload.score) <= 0) return "Score is invalid";
-  if (!payload.isoDate) return "Date is required";
-  if (!payload.replay || typeof payload.replay !== "object") return "Replay is required";
-  return "";
+  if (!payload || typeof payload !== 'object') return 'Payload is required';
+  if (!/^[A-Z?]{3}$/.test(payload.initials || '')) return 'Initials must be 3 letters';
+  if (!ALLOWED_MODES.has(payload.mode || '')) return 'Mode is invalid';
+
+  const score = Number(payload.score);
+  if (!Number.isFinite(score) || score <= 0 || score > MAX_SCORE) return 'Score is invalid';
+
+  if (!payload.isoDate || Number.isNaN(Date.parse(payload.isoDate))) return 'Date is required';
+  if (!payload.replay || typeof payload.replay !== 'object') return 'Replay is required';
+
+  return validateReplay(payload.replay, payload.mode);
+}
+
+function validateReplay(replay, mode) {
+  if (!ALLOWED_REPLAY_VERSIONS.has(Number(replay.version || 1))) return 'Replay version is invalid';
+
+  const boardSize = Number(replay.boardSize);
+  if (!Number.isInteger(boardSize) || boardSize < 4 || boardSize > 8) return 'Replay board size is invalid';
+  if (`${boardSize}x${boardSize}` !== mode) return 'Replay mode mismatch';
+
+  if (!Array.isArray(replay.start) || replay.start.length > boardSize * boardSize) return 'Replay start is invalid';
+  if (!Array.isArray(replay.turns) || replay.turns.length > MAX_REPLAY_TURNS) return 'Replay turns are invalid';
+
+  if (replay.version === 2) {
+    for (const spawn of replay.start) {
+      if (!Array.isArray(spawn) || spawn.length !== 3) return 'Replay start is invalid';
+      if (!isValidSpawnTuple(spawn, boardSize)) return 'Replay start is invalid';
+    }
+    for (const turn of replay.turns) {
+      if (!Array.isArray(turn) || turn.length !== 4) return 'Replay turns are invalid';
+      if (!['U', 'R', 'D', 'L'].includes(turn[0])) return 'Replay turns are invalid';
+      if (!isIntegerLike(turn[1]) || !isIntegerLike(turn[2]) || !isIntegerLike(turn[3])) return 'Replay turns are invalid';
+    }
+    return '';
+  }
+
+  for (const spawn of replay.start) {
+    if (!isSpawnObject(spawn, boardSize)) return 'Replay start is invalid';
+  }
+  for (const turn of replay.turns) {
+    if (!turn || typeof turn !== 'object') return 'Replay turns are invalid';
+    if (!['up', 'right', 'down', 'left'].includes(turn.move)) return 'Replay turns are invalid';
+    if (turn.spawn && !isSpawnObject(turn.spawn, boardSize)) return 'Replay turns are invalid';
+  }
+
+  return '';
+}
+
+function isSpawnObject(spawn, boardSize) {
+  if (!spawn || typeof spawn !== 'object') return false;
+  return isValidSpawnTuple([spawn.row, spawn.col, spawn.value], boardSize);
+}
+
+function isValidSpawnTuple(tuple, boardSize) {
+  const [row, col, value] = tuple.map(Number);
+  return Number.isInteger(row)
+    && Number.isInteger(col)
+    && row >= 0 && row < boardSize
+    && col >= 0 && col < boardSize
+    && (value === 2 || value === 4 || (value > 0 && Number.isInteger(value)));
+}
+
+function isIntegerLike(value) {
+  return Number.isInteger(Number(value));
 }
 
 function chunkString(value, chunkSize) {
@@ -111,7 +227,7 @@ function chunkString(value, chunkSize) {
 
 async function createIssue(env, title, body) {
   const response = await githubRequest(env, `/repos/${GITHUB_OWNER}/${GITHUB_REPO}/issues`, {
-    method: "POST",
+    method: 'POST',
     body: JSON.stringify({
       title,
       body,
@@ -124,7 +240,7 @@ async function createIssue(env, title, body) {
 
 async function createIssueComment(env, issueNumber, body) {
   const response = await githubRequest(env, `/repos/${GITHUB_OWNER}/${GITHUB_REPO}/issues/${issueNumber}/comments`, {
-    method: "POST",
+    method: 'POST',
     body: JSON.stringify({ body }),
   });
 
@@ -135,10 +251,10 @@ async function githubRequest(env, path, init) {
   const response = await fetch(`https://api.github.com${path}`, {
     ...init,
     headers: {
-      "Authorization": `Bearer ${env.GITHUB_TOKEN}`,
-      "Content-Type": "application/json",
-      "User-Agent": "2048-angeloso-worker",
-      "Accept": "application/vnd.github+json",
+      'Authorization': `Bearer ${env.GITHUB_TOKEN}`,
+      'Content-Type': 'application/json',
+      'User-Agent': '2048-angeloso-worker',
+      'Accept': 'application/vnd.github+json',
       ...(init.headers || {}),
     },
   });
@@ -155,9 +271,8 @@ function json(data, status, headers) {
   return new Response(JSON.stringify(data), {
     status,
     headers: {
-      "Content-Type": "application/json; charset=utf-8",
+      'Content-Type': 'application/json; charset=utf-8',
       ...headers,
     },
   });
 }
-
