@@ -50,6 +50,7 @@ const journalListElement = document.getElementById("journal-list");
 const journalTitleElement = document.getElementById("journal-title");
 const journalSubtitleElement = document.getElementById("journal-subtitle");
 const gameTimerElement = document.getElementById("game-timer");
+const gameMovesElement = document.getElementById("game-moves");
 const uiFxLayerElement = document.getElementById("ui-fx-layer");
 const starfieldElement = document.getElementById("starfield");
 const attractOverlayElement = document.getElementById("attract-overlay");
@@ -188,9 +189,13 @@ function renderGameTimer() {
   if (!gameTimerElement) return;
   if (replayMode) {
     gameTimerElement.textContent = "REPLAY";
+    if (gameMovesElement) gameMovesElement.textContent = `${moveSequence} jugadas`;
     return;
   }
   gameTimerElement.textContent = formatElapsedTime(getElapsedMs());
+  if (gameMovesElement) {
+    gameMovesElement.textContent = `${moveSequence} ${moveSequence === 1 ? "jugada" : "jugadas"}`;
+  }
 }
 
 function stopGameTimer() {
@@ -1235,13 +1240,21 @@ function getHoleSearchDepth(values) {
     if (emptyCells <= 8) return 4;
     return 3;
   }
+  if (boardSize === 5) {
+    if (emptyCells <= 2) return 5;
+    if (emptyCells <= 6) return 4;
+    if (emptyCells <= 10) return 3;
+    return 2;
+  }
   if (boardSize >= 8) {
-    if (emptyCells <= 3) return 3;
+    if (emptyCells <= 2) return 4;
+    if (emptyCells <= 6) return 3;
     return 2;
   }
   if (boardSize >= 6) {
-    if (emptyCells <= 2) return 4;
-    if (emptyCells <= 6) return 3;
+    if (emptyCells <= 2) return 5;
+    if (emptyCells <= 5) return 4;
+    if (emptyCells <= 10) return 3;
     return 2;
   }
   if (emptyCells <= 2) return 5;
@@ -1252,10 +1265,11 @@ function getHoleSearchDepth(values) {
 
 function getRelevantChanceCells(values) {
   const empty = getEmptyPositions(values);
-  if (boardSize === 4) return empty;
+  if (boardSize <= 5 && empty.length <= 12) return empty;
   if (empty.length <= 6) return empty;
 
   const weightedSnakeMap = getDominantSnakeWeightMap(values);
+  const maxCandidates = boardSize >= 8 ? 6 : boardSize >= 6 ? 7 : 8;
 
   return empty
     .map((cell) => ({
@@ -1263,7 +1277,7 @@ function getRelevantChanceCells(values) {
       badness: (weightedSnakeMap[cell.row][cell.col] * 12) - (getAdjacentEmptyCount(values, cell.row, cell.col) * 70),
     }))
     .sort((left, right) => right.badness - left.badness)
-    .slice(0, boardSize >= 6 ? 5 : 6);
+    .slice(0, maxCandidates);
 }
 
 function evaluateHoleFuture(values, depth, isChanceNode, cache, preferredCorner) {
@@ -1371,7 +1385,13 @@ function scheduleHoleMove() {
     }
     const direction = getHoleBestMove();
     if (!direction) {
+      gameState.over = true;
       stopHoleMode({ keepStatus: true });
+      render();
+      renderGameTimer();
+      setGameOverOverlay(true, "BY MACHINE");
+      maybePersistCurrentScore();
+      setStatus("No quedan movimientos. Pulsa Nueva partida.");
       return;
     }
     move(direction);
