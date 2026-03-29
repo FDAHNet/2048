@@ -2479,6 +2479,24 @@ button:hover {
   font-weight: 700;
 }
 
+.admin-user-open-button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 0.18em;
+}
+
+.admin-user-open-button:hover,
+.admin-user-open-button:focus-visible {
+  color: #fff3b0;
+  outline: none;
+}
+
 .admin-table-empty {
   text-align: center;
   color: var(--muted);

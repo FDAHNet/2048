@@ -967,7 +967,7 @@ function renderAdminOverview() {
 
   adminUsersBodyElement.innerHTML = players.map((player) => `
     <tr class="admin-clickable-row" data-admin-alias="${escapeHtml(player.alias)}">
-      <td>${escapeHtml(player.alias)}</td>
+      <td><button type="button" class="admin-user-open-button" data-admin-alias="${escapeHtml(player.alias)}">${escapeHtml(player.alias)}</button></td>
       <td>${escapeHtml(formatAdminNumber(player.credits))}</td>
       <td>${escapeHtml(formatAdminNumber(player.gamesPlayed))}</td>
       <td>${escapeHtml(formatAdminNumber(player.normalGames))}</td>
@@ -979,16 +979,20 @@ function renderAdminOverview() {
     </tr>
   `).join("");
 
-  adminUsersBodyElement.querySelectorAll("[data-admin-alias]").forEach((row) => {
-    row.addEventListener("click", () => {
-      const alias = row.getAttribute("data-admin-alias");
-      if (alias) void loadAdminUser(alias, true);
-    });
-  });
+  adminUsersBodyElement.removeEventListener("click", handleAdminUserTableClick);
+  adminUsersBodyElement.addEventListener("click", handleAdminUserTableClick);
 
   adminBetDefinitionsDraft = cloneAdvancedBetDefinitions(betDefinitions.length ? betDefinitions : advancedBetDefinitions);
   renderAdminBetDefinitionsEditor();
   renderAdminUserPanel();
+}
+
+function handleAdminUserTableClick(event) {
+  const target = event.target;
+  if (!(target instanceof Element)) return;
+  const row = target.closest("[data-admin-alias]");
+  const alias = row?.getAttribute("data-admin-alias");
+  if (alias) void loadAdminUser(alias, true);
 }
 
 async function loadAdminOverview(force = false) {
