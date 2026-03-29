@@ -393,6 +393,7 @@ h1 {
 .credits-card strong {
   color: #ffe58f;
   text-shadow: 0 0 12px rgba(255, 214, 98, 0.18);
+  min-height: 1.62em;
 }
 
 .credits-card {
@@ -407,10 +408,11 @@ h1 {
 .credits-player {
   display: block;
   margin-top: auto;
-  min-height: 0.92em;
+  min-height: 1em;
+  padding-top: 7px;
   color: color-mix(in srgb, var(--accent) 62%, white 38%);
-  font-size: 0.6rem;
-  letter-spacing: 0.05em;
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   white-space: nowrap;
   overflow: hidden;
@@ -422,8 +424,8 @@ h1 {
   justify-items: center;
   align-items: center;
   gap: 0;
-  margin-top: -16px;
-  margin-bottom: 0;
+  margin-top: -26px;
+  margin-bottom: 2px;
 }
 
 .advanced-mini-label {
