@@ -720,6 +720,19 @@ async function syncAdvancedCredits(nextCredits) {
   return body;
 }
 
+function syncAdvancedCreditsLocally(nextCredits, alias = "") {
+  const normalizedAlias = String(alias || advancedPlayerAuth?.alias || "").toUpperCase();
+  advancedCredits = Number(nextCredits ?? 0);
+  if (advancedPlayerAuth && (!normalizedAlias || advancedPlayerAuth.alias === normalizedAlias)) {
+    advancedPlayerAuth = {
+      ...advancedPlayerAuth,
+      credits: advancedCredits,
+    };
+    saveAdvancedPlayerAuth(advancedPlayerAuth);
+  }
+  updateAdvancedModeUI();
+}
+
 async function recordAdvancedWager(round) {
   if (!advancedPlayerAuth?.alias || !advancedPlayerAuth?.pinHash || !round?.wagers?.length) return;
   try {
@@ -1125,6 +1138,9 @@ async function adjustAdminUserCredits(direction) {
       alias: adminSelectedUserAlias,
       delta,
     });
+    if (advancedPlayerAuth?.alias && adminSelectedUserData?.alias === advancedPlayerAuth.alias) {
+      syncAdvancedCreditsLocally(adminSelectedUserData.credits, adminSelectedUserData.alias);
+    }
     void loadAdminOverview(true);
   } catch (error) {
     if (adminUserStatusElement) {
@@ -1197,6 +1213,9 @@ async function loadLedger(force = false) {
       alias: advancedPlayerAuth.alias,
       pinHash: advancedPlayerAuth.pinHash,
     });
+    if (ledgerData?.alias && ledgerData.alias === advancedPlayerAuth.alias) {
+      syncAdvancedCreditsLocally(ledgerData.credits, ledgerData.alias);
+    }
   } catch (error) {
     setStatus(`No pude cargar el extracto: ${error.message}`);
   } finally {
