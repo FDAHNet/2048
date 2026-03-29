@@ -112,6 +112,7 @@ const advancedBetsListElement = document.getElementById("advanced-bets-list");
 const advancedBetsSummaryElement = document.getElementById("advanced-bets-summary");
 const advancedBetsActiveElement = document.getElementById("advanced-bets-active");
 const advancedBetsCloseButton = document.getElementById("advanced-bets-close-button");
+const advancedBetsCollapseButton = document.getElementById("advanced-bets-collapse-button");
 const advancedLogoutButton = document.getElementById("advanced-logout-button");
 const clearAdvancedBetsButton = document.getElementById("clear-advanced-bets-button");
 const replayViewerElement = document.getElementById("replay-viewer");
@@ -161,6 +162,7 @@ let activeAdvancedRound = null;
 let advancedBetResultMessage = "";
 let awaitingManualStart = false;
 let advancedBetsVisible = advancedMode;
+let advancedBetsCollapsed = false;
 let journalEntries = [];
 let currentReplay = null;
 let recordsPanelOpen = false;
@@ -387,6 +389,10 @@ function updateAdvancedModeUI() {
   if (advancedModeToggle) advancedModeToggle.checked = advancedMode;
   creditsCardElement?.classList.toggle("hidden", !advancedMode);
   advancedBetsPanelElement?.classList.toggle("hidden", !(advancedMode && advancedBetsVisible));
+  advancedBetsPanelElement?.classList.toggle("is-collapsed", advancedBetsCollapsed);
+  if (advancedBetsCollapseButton) {
+    advancedBetsCollapseButton.textContent = advancedBetsCollapsed ? "Expandir" : "Encoger";
+  }
   if (creditsElement) {
     creditsElement.textContent = String(Math.max(0, Math.trunc(advancedCredits)));
     applyScoreSizing(creditsElement, advancedCredits);
@@ -1515,7 +1521,10 @@ async function handleAdvancedModeToggle() {
     return;
   }
   localStorage.setItem(ADVANCED_MODE_KEY, String(advancedMode));
-  if (advancedMode) advancedBetsVisible = true;
+  if (advancedMode) {
+    advancedBetsVisible = true;
+    advancedBetsCollapsed = false;
+  }
   updateAdvancedModeUI();
 
   if (!advancedMode) {
@@ -1574,10 +1583,26 @@ function logoutAdvancedPlayer() {
   closeAdvancedAuthEntry();
   advancedMode = false;
   advancedBetsVisible = false;
+  advancedBetsCollapsed = false;
   if (advancedModeToggle) advancedModeToggle.checked = false;
   localStorage.setItem(ADVANCED_MODE_KEY, "false");
   updateAdvancedModeUI();
   setStatus("Sesion avanzada cerrada.");
+}
+
+function closeAdvancedMode() {
+  if (activeAdvancedRound?.wagers?.length && !activeAdvancedRound.settled) {
+    setStatus("No puedes cerrar Modo Avanzado con una ronda activa.");
+    return;
+  }
+  closeAdvancedAuthEntry();
+  advancedMode = false;
+  advancedBetsVisible = false;
+  advancedBetsCollapsed = false;
+  if (advancedModeToggle) advancedModeToggle.checked = false;
+  localStorage.setItem(ADVANCED_MODE_KEY, "false");
+  updateAdvancedModeUI();
+  setStatus("Modo avanzado cerrado.");
 }
 
 function boardValuesFromState(state = gameState) {
@@ -4331,7 +4356,10 @@ advancedAuthXButton?.addEventListener("click", () => {
   }
 });
 advancedBetsCloseButton?.addEventListener("click", () => {
-  advancedBetsVisible = false;
+  closeAdvancedMode();
+});
+advancedBetsCollapseButton?.addEventListener("click", () => {
+  advancedBetsCollapsed = !advancedBetsCollapsed;
   updateAdvancedModeUI();
 });
 advancedLogoutButton?.addEventListener("click", logoutAdvancedPlayer);
