@@ -19,6 +19,11 @@ const HOLE_SEQUENCE = ["h", "o", "l", "e"];
 const HOLE_DIRECTIONS = ["up", "left", "right", "down"];
 const AUTOSAVE_INTERVAL_MS = 30 * 60 * 1000;
 const INITIALS_TIMEOUT_MS = 60 * 1000;
+const RECORD_CATEGORIES = ["normal", "hole"];
+const RECORD_CATEGORY_LABELS = {
+  normal: "Normal",
+  hole: "H.O.L.E.",
+};
 
 const boardElement = document.getElementById("board");
 const fxLayer = document.getElementById("fx-layer");
@@ -109,6 +114,7 @@ let holeMode = false;
 let holeTimer = null;
 let holeSequenceProgress = 0;
 let holePreferredCorner = null;
+let holeRunUsed = false;
 let attractDismissed = false;
 let theme = localStorage.getItem(THEME_KEY) || "crt";
 let gameSessionId = 0;
@@ -116,7 +122,12 @@ let expandedRecordsMode = null;
 let replayArrowRotation = 0;
 let statsPanelOpen = false;
 let lastGameOverReason = "";
-let globalRecordsCache = Object.fromEntries(["4x4", "5x5", "6x6", "8x8"].map((mode) => [mode, []]));
+let globalRecordsCache = Object.fromEntries(
+  ["4x4", "5x5", "6x6", "8x8"].map((mode) => [
+    mode,
+    Object.fromEntries(RECORD_CATEGORIES.map((category) => [category, []])),
+  ])
+);
 let globalRecordsLoaded = false;
 let globalRecordFanfarePlayed = false;
 let bestScoreBurstTimer = null;
@@ -233,6 +244,18 @@ function renderGameTimer() {
 
 function getHighestTileValue(state = gameState) {
   return Math.max(0, ...state.cells.flat().map((tile) => tile?.value || 0));
+}
+
+function normalizeRecordCategory(category) {
+  return RECORD_CATEGORIES.includes(category) ? category : "normal";
+}
+
+function getCurrentRecordCategory() {
+  return holeRunUsed ? "hole" : "normal";
+}
+
+function getRecordCategoryLabel(category) {
+  return RECORD_CATEGORY_LABELS[normalizeRecordCategory(category)] || RECORD_CATEGORY_LABELS.normal;
 }
 
 function getMoveDirectionStats() {
@@ -881,6 +904,7 @@ function startGame(options = {}) {
   pendingGlobalRecord = null;
   journalEntries = [];
   currentReplay = null;
+  holeRunUsed = false;
   moveHistory = [];
   moveSequence = 0;
   globalRecordFanfarePlayed = false;
@@ -897,6 +921,7 @@ function startGame(options = {}) {
       version: 1,
       boardSize,
       mode: `${boardSize}x${boardSize}`,
+      category: getCurrentRecordCategory(),
       startedAt: new Date().toISOString(),
       start: [startSpawnA, startSpawnB].filter(Boolean),
       turns: [],
@@ -1542,6 +1567,8 @@ function startHoleMode() {
   if (demoMode || replayMode || initialsEntryState.active || gameState.over) return;
   stopDemoMode();
   holeMode = true;
+  holeRunUsed = true;
+  if (currentReplay) currentReplay.category = "hole";
   holeSequenceProgress = 0;
   holePreferredCorner = determineHolePreferredCorner(boardValuesFromState());
   setStatus("MODO H.O.L.E. Pulsa Espacio para parar.");
@@ -1558,7 +1585,7 @@ function updateScore(points) {
 function maybeCelebrateLiveGlobalRecord() {
   if (demoMode || globalRecordFanfarePlayed || !globalRecordsLoaded) return;
   const mode = `${boardSize}x${boardSize}`;
-  const currentTopScore = getTopScoreForMode(mode);
+  const currentTopScore = getTopScoreForMode(mode, getCurrentRecordCategory());
   if (gameState.score > currentTopScore) {
     globalRecordFanfarePlayed = true;
     activateBestScoreCelebration();
@@ -1666,6 +1693,7 @@ function encodeReplayPayload(replay, options = {}) {
     version: 2,
     boardSize: replay.boardSize,
     mode: replay.mode,
+    category: normalizeRecordCategory(replay.category),
     startedAt: replay.startedAt,
     finishedAt,
     finalScore,
@@ -1688,6 +1716,7 @@ function decodeReplayPayload(replay) {
     version: replay.version,
     boardSize: replay.boardSize,
     mode: replay.mode,
+    category: normalizeRecordCategory(replay.category),
     startedAt: replay.startedAt,
     finishedAt: replay.finishedAt || null,
     finalScore: replay.finalScore ?? null,
@@ -1720,7 +1749,9 @@ function loadRecords() {
 
   try {
     const records = JSON.parse(raw);
-    return Array.isArray(records) ? records : [];
+    return Array.isArray(records)
+      ? records.map((record) => ({ ...record, category: normalizeRecordCategory(record.category) }))
+      : [];
   } catch {
     return [];
   }
@@ -1731,7 +1762,16 @@ function saveRecords(records) {
 }
 
 function saveRecordsWithFallback(records) {
-  const limited = records.slice(0, MAX_RECORDS_PER_MODE);
+  const limited = RECORD_CATEGORIES.flatMap((category) => {
+    const categoryRecords = records
+      .filter((record) => normalizeRecordCategory(record.category) === category)
+      .sort((left, right) => {
+        if (right.score !== left.score) return right.score - left.score;
+        return left.isoDate.localeCompare(right.isoDate);
+      })
+      .slice(0, MAX_RECORDS_PER_MODE);
+    return categoryRecords;
+  });
   try {
     saveRecords(limited);
     return { replayStored: true };
@@ -1750,6 +1790,7 @@ function resolveReplayForRecord(record) {
     && pendingGlobalRecord.initials === record.initials
     && pendingGlobalRecord.score === record.score
     && pendingGlobalRecord.mode === record.mode
+    && normalizeRecordCategory(pendingGlobalRecord.category) === normalizeRecordCategory(record.category)
   ) {
     return decodeReplayPayload(pendingGlobalRecord.replay);
   }
@@ -1758,9 +1799,11 @@ function resolveReplayForRecord(record) {
 
 function isRecordScore(score) {
   if (score <= 0) return false;
+  const category = getCurrentRecordCategory();
   const records = loadRecords();
-  if (records.length < MAX_RECORDS_PER_MODE) return true;
-  return records.some((record) => score > record.score);
+  const categoryRecords = records.filter((record) => normalizeRecordCategory(record.category) === category);
+  if (categoryRecords.length < MAX_RECORDS_PER_MODE) return true;
+  return categoryRecords.some((record) => score > record.score);
 }
 
 function renderRecords() {
@@ -2081,11 +2124,11 @@ function renderGlobalRecords(recordsByMode) {
   globalRecordsLoaded = true;
   GLOBAL_MODES.forEach((mode) => {
     const listElement = globalRecordsElements[mode];
-    const allRecords = (recordsByMode[mode] || []).slice(0, MAX_RECORDS_PER_MODE);
-    const records = expandedRecordsMode === mode ? allRecords : allRecords.slice(0, 4);
     listElement.innerHTML = "";
+    const categoryRecords = recordsByMode[mode] || {};
+    const hasAnyRecord = RECORD_CATEGORIES.some((category) => (categoryRecords[category] || []).length);
 
-    if (!records.length) {
+    if (!hasAnyRecord) {
       const row = document.createElement("div");
       row.className = "records-row records-row-empty";
       row.textContent = "Sin records enviados.";
@@ -2093,31 +2136,57 @@ function renderGlobalRecords(recordsByMode) {
       return;
     }
 
-    records.forEach((record, index) => {
-      const row = document.createElement("div");
-      row.className = "records-row";
+    RECORD_CATEGORIES.forEach((category) => {
+      const allRecords = (categoryRecords[category] || []).slice(0, MAX_RECORDS_PER_MODE);
+      const records = expandedRecordsMode === mode ? allRecords : allRecords.slice(0, 4);
 
-      const rank = document.createElement("span");
-      rank.className = "record-rank";
-      rank.textContent = String(index + 1);
+      const categoryBlock = document.createElement("div");
+      categoryBlock.className = "records-category-block";
 
-      const initials = document.createElement("span");
-      initials.textContent = record.initials;
+      const categoryLabel = document.createElement("div");
+      categoryLabel.className = "records-category-label";
+      categoryLabel.textContent = getRecordCategoryLabel(category);
+      categoryBlock.appendChild(categoryLabel);
 
-      const score = document.createElement("span");
-      score.textContent = String(record.score);
+      const categoryList = document.createElement("div");
+      categoryList.className = "records-list records-category-list";
 
-      const timestamp = document.createElement("span");
-      timestamp.textContent = record.displayDate;
+      if (!records.length) {
+        const row = document.createElement("div");
+        row.className = "records-row records-row-empty";
+        row.textContent = "Sin records en esta liga.";
+        categoryList.appendChild(row);
+      } else {
+        records.forEach((record, index) => {
+          const row = document.createElement("div");
+          row.className = "records-row";
 
-      const action = document.createElement("button");
-      action.type = "button";
-      action.className = "secondary-button record-action-button";
-      action.textContent = "Ver partida";
-      action.addEventListener("click", () => openReplayViewer(record.replay, record));
+          const rank = document.createElement("span");
+          rank.className = "record-rank";
+          rank.textContent = String(index + 1);
 
-      row.append(rank, initials, score, timestamp, action);
-      listElement.appendChild(row);
+          const initials = document.createElement("span");
+          initials.textContent = record.initials;
+
+          const score = document.createElement("span");
+          score.textContent = String(record.score);
+
+          const timestamp = document.createElement("span");
+          timestamp.textContent = record.displayDate;
+
+          const action = document.createElement("button");
+          action.type = "button";
+          action.className = "secondary-button record-action-button";
+          action.textContent = "Ver partida";
+          action.addEventListener("click", () => openReplayViewer(record.replay, record));
+
+          row.append(rank, initials, score, timestamp, action);
+          categoryList.appendChild(row);
+        });
+      }
+
+      categoryBlock.appendChild(categoryList);
+      listElement.appendChild(categoryBlock);
     });
   });
   syncExpandedRecordsUI();
@@ -2145,17 +2214,19 @@ function setExpandedRecordsMode(mode) {
   renderGlobalRecords(globalRecordsCache);
 }
 
-function getTopScoreForMode(mode) {
-  const records = globalRecordsCache[mode] || [];
+function getTopScoreForMode(mode, category = getCurrentRecordCategory()) {
+  const records = globalRecordsCache[mode]?.[normalizeRecordCategory(category)] || [];
   return records.length ? Math.max(...records.map((record) => record.score)) : 0;
 }
 
 function mergeGlobalRecordIntoCache(record) {
   if (!record?.mode || !globalRecordsCache[record.mode]) return;
+  const category = normalizeRecordCategory(record.category);
   const merged = [
-    ...globalRecordsCache[record.mode],
+    ...globalRecordsCache[record.mode][category],
     {
       ...record,
+      category,
       replay: decodeReplayPayload(record.replay),
     },
   ];
@@ -2163,7 +2234,7 @@ function mergeGlobalRecordIntoCache(record) {
     if (right.score !== left.score) return right.score - left.score;
     return left.isoDate.localeCompare(right.isoDate);
   });
-  globalRecordsCache[record.mode] = merged.slice(0, MAX_RECORDS_PER_MODE);
+  globalRecordsCache[record.mode][category] = merged.slice(0, MAX_RECORDS_PER_MODE);
   globalRecordsLoaded = true;
 }
 
@@ -2171,6 +2242,7 @@ function parseGlobalRecord(issue) {
   const body = issue.body || "";
   const initials = body.match(/Initials:\s*([A-Z?]{3})/i)?.[1]?.toUpperCase();
   const mode = body.match(/Mode:\s*([0-9]+x[0-9]+)/i)?.[1];
+  const category = normalizeRecordCategory(body.match(/Category:\s*(normal|hole)/i)?.[1]?.toLowerCase());
   const scoreText = body.match(/Score:\s*([0-9]+)/i)?.[1];
   const replayMatch = body.match(/```json\s*([\s\S]*?)```/i);
   const replayParts = Number(body.match(/Replay Parts:\s*([0-9]+)/i)?.[1] || 0);
@@ -2190,6 +2262,7 @@ function parseGlobalRecord(issue) {
   return {
     initials,
     mode,
+    category,
     score,
     isoDate: issue.created_at,
     issueNumber: issue.number,
@@ -2266,19 +2339,26 @@ async function fetchGlobalRecords() {
       .filter((issue) => !issue.pull_request)
       .map(parseGlobalRecord)
       .filter(Boolean);
-    const grouped = Object.fromEntries(GLOBAL_MODES.map((mode) => [mode, []]));
+    const grouped = Object.fromEntries(
+      GLOBAL_MODES.map((mode) => [
+        mode,
+        Object.fromEntries(RECORD_CATEGORIES.map((category) => [category, []])),
+      ])
+    );
 
     records.forEach((record) => {
       if (!grouped[record.mode]) return;
-      grouped[record.mode].push(record);
+      grouped[record.mode][normalizeRecordCategory(record.category)].push(record);
     });
 
     GLOBAL_MODES.forEach((mode) => {
-      grouped[mode].sort((left, right) => {
-        if (right.score !== left.score) return right.score - left.score;
-        return left.isoDate.localeCompare(right.isoDate);
+      RECORD_CATEGORIES.forEach((category) => {
+        grouped[mode][category].sort((left, right) => {
+          if (right.score !== left.score) return right.score - left.score;
+          return left.isoDate.localeCompare(right.isoDate);
+        });
+        grouped[mode][category] = grouped[mode][category].slice(0, MAX_RECORDS_PER_MODE);
       });
-      grouped[mode] = grouped[mode].slice(0, MAX_RECORDS_PER_MODE);
     });
 
     renderGlobalRecords(grouped);
@@ -2380,6 +2460,7 @@ function savePendingRecord(forcedInitials = null) {
     initials,
     score: initialsEntryState.pendingScore,
     mode: `${boardSize}x${boardSize}`,
+    category: getCurrentRecordCategory(),
     isoDate: now.toISOString(),
     displayDate,
     replay: replayPayload,
@@ -2396,12 +2477,13 @@ function savePendingRecord(forcedInitials = null) {
   pendingGlobalRecord = {
     initials,
     mode: `${boardSize}x${boardSize}`,
+    category: getCurrentRecordCategory(),
     score: initialsEntryState.pendingScore,
     isoDate: now.toISOString(),
     displayDate,
     replay: replayPayload,
   };
-  const currentTopScore = getTopScoreForMode(pendingGlobalRecord.mode);
+  const currentTopScore = getTopScoreForMode(pendingGlobalRecord.mode, pendingGlobalRecord.category);
   const isGlobalTopScore = pendingGlobalRecord.score > currentTopScore;
   closeInitialsEntry();
   renderRecords();
@@ -2422,13 +2504,14 @@ function savePendingRecord(forcedInitials = null) {
 
 function buildGlobalRecordIssueUrl() {
   if (!pendingGlobalRecord) return "";
-  const title = `[Record] ${pendingGlobalRecord.initials} - ${pendingGlobalRecord.score} - ${pendingGlobalRecord.mode}`;
+  const title = `[Record] ${pendingGlobalRecord.initials} - ${pendingGlobalRecord.score} - ${pendingGlobalRecord.mode} - ${getRecordCategoryLabel(pendingGlobalRecord.category)}`;
   const replayJson = pendingGlobalRecord.replay ? JSON.stringify(pendingGlobalRecord.replay) : "{}";
   const body = [
     "New global score submission",
     "",
     `Initials: ${pendingGlobalRecord.initials}`,
     `Mode: ${pendingGlobalRecord.mode}`,
+    `Category: ${normalizeRecordCategory(pendingGlobalRecord.category)}`,
     `Score: ${pendingGlobalRecord.score}`,
     `Date: ${pendingGlobalRecord.isoDate}`,
     "",

@@ -1649,6 +1649,20 @@ button:hover {
   gap: 8px;
 }
 
+.records-category-block {
+  display: grid;
+  gap: 8px;
+}
+
+.records-category-label {
+  padding: 6px 12px 2px;
+  color: var(--accent);
+  font-family: "Press Start 2P", "Space Grotesk", sans-serif;
+  font-size: 0.66rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
 .global-records-table {
   margin-top: 18px;
 }

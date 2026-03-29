@@ -4,6 +4,7 @@ const GITHUB_LABEL = 'record';
 const DEFAULT_ALLOWED_ORIGIN = 'https://fdahnet.github.io';
 const DEFAULT_ALLOWED_REFERER_PREFIX = 'https://fdahnet.github.io';
 const ALLOWED_MODES = new Set(['4x4', '5x5', '6x6', '8x8']);
+const ALLOWED_CATEGORIES = new Set(['normal', 'hole']);
 const ALLOWED_REPLAY_VERSIONS = new Set([1, 2]);
 const MAX_REQUEST_BYTES = 4_000_000;
 const MAX_ISSUE_BODY = 62_000;
@@ -68,13 +69,14 @@ export default {
     }
 
     try {
-      const title = `[Record] ${payload.initials} - ${payload.score} - ${payload.mode}`;
+      const title = `[Record] ${payload.initials} - ${payload.score} - ${payload.mode} - ${payload.category.toUpperCase()}`;
       const replayJson = JSON.stringify(payload.replay);
       const baseLines = [
         'New global score submission',
         '',
         `Initials: ${payload.initials}`,
         `Mode: ${payload.mode}`,
+        `Category: ${payload.category}`,
         `Score: ${payload.score}`,
         `Date: ${payload.isoDate}`,
       ];
@@ -154,6 +156,7 @@ function validatePayload(payload) {
   if (!payload || typeof payload !== 'object') return 'Payload is required';
   if (!/^[A-Z?]{3}$/.test(payload.initials || '')) return 'Initials must be 3 letters';
   if (!ALLOWED_MODES.has(payload.mode || '')) return 'Mode is invalid';
+  if (!ALLOWED_CATEGORIES.has(payload.category || '')) return 'Category is invalid';
 
   const score = Number(payload.score);
   if (!Number.isFinite(score) || score <= 0 || score > MAX_SCORE) return 'Score is invalid';
@@ -276,4 +279,8 @@ function json(data, status, headers) {
     },
   });
 }
+
+
+
+
 
