@@ -51,6 +51,10 @@ const journalTitleElement = document.getElementById("journal-title");
 const journalSubtitleElement = document.getElementById("journal-subtitle");
 const gameTimerElement = document.getElementById("game-timer");
 const gameMovesElement = document.getElementById("game-moves");
+const showStatsButton = document.getElementById("show-stats-button");
+const statsPanelElement = document.getElementById("stats-panel");
+const statsPanelContentElement = document.getElementById("stats-panel-content");
+const closeStatsButton = document.getElementById("close-stats-button");
 const uiFxLayerElement = document.getElementById("ui-fx-layer");
 const starfieldElement = document.getElementById("starfield");
 const attractOverlayElement = document.getElementById("attract-overlay");
@@ -110,6 +114,8 @@ let theme = localStorage.getItem(THEME_KEY) || "crt";
 let gameSessionId = 0;
 let expandedRecordsMode = null;
 let replayArrowRotation = 0;
+let statsPanelOpen = false;
+let lastGameOverReason = "";
 let globalRecordsCache = Object.fromEntries(["4x4", "5x5", "6x6", "8x8"].map((mode) => [mode, []]));
 let globalRecordsLoaded = false;
 let globalRecordFanfarePlayed = false;
@@ -166,11 +172,38 @@ function updateAudioToggleButton() {
   audioToggleButton.setAttribute("aria-pressed", String(audioEnabled));
 }
 
+function getBoardFrameElement() {
+  return document.querySelector(".board-frame");
+}
+
 function setGameOverOverlay(visible, reason = "") {
   gameOverOverlayElement.classList.toggle("hidden", !visible);
+  lastGameOverReason = visible ? reason : "";
+  if (!visible) {
+    setStatsPanelOpen(false);
+  }
   if (gameOverReasonElement) {
     gameOverReasonElement.textContent = visible ? reason : "";
   }
+  updateStatsButton();
+}
+
+function setStatsPanelOpen(nextOpen) {
+  const boardFrame = getBoardFrameElement();
+  statsPanelOpen = Boolean(nextOpen && gameState.over && !replayMode);
+  if (boardFrame) {
+    boardFrame.classList.toggle("stats-open", statsPanelOpen);
+  }
+  statsPanelElement?.classList.toggle("hidden", !statsPanelOpen);
+  if (statsPanelOpen) {
+    renderStatsPanel();
+  }
+}
+
+function updateStatsButton() {
+  if (!showStatsButton) return;
+  const visible = Boolean(gameState.over && !replayMode && !demoMode);
+  showStatsButton.classList.toggle("hidden", !visible);
 }
 
 function formatElapsedTime(ms) {
@@ -196,6 +229,100 @@ function renderGameTimer() {
   if (gameMovesElement) {
     gameMovesElement.textContent = `${moveSequence} ${moveSequence === 1 ? "jugada" : "jugadas"}`;
   }
+}
+
+function getHighestTileValue(state = gameState) {
+  return Math.max(0, ...state.cells.flat().map((tile) => tile?.value || 0));
+}
+
+function getMoveDirectionStats() {
+  const counts = { up: 0, down: 0, left: 0, right: 0 };
+  (currentReplay?.turns || []).forEach((turn) => {
+    if (counts[turn.move] !== undefined) counts[turn.move] += 1;
+  });
+  return counts;
+}
+
+function renderStatsPanel() {
+  if (!statsPanelContentElement) return;
+
+  const elapsedText = formatElapsedTime(getElapsedMs());
+  const highestTile = getHighestTileValue();
+  const totalMoves = moveSequence;
+  const averageScore = totalMoves ? (gameState.score / totalMoves).toFixed(1) : "0.0";
+  const mode = `${boardSize}x${boardSize}`;
+  const achievementCount = journalEntries.length;
+  const biggestAchievement = achievementCount ? Math.max(...journalEntries.map((entry) => entry.value)) : 0;
+  const reasonLabel = lastGameOverReason || "BY MACHINE";
+  const directionStats = getMoveDirectionStats();
+  const directionRows = Object.entries(directionStats)
+    .map(([direction, count]) => `
+      <div class="stats-list-row">
+        <span>${getDirectionLabel(direction)}</span>
+        <span>${count}</span>
+      </div>
+    `)
+    .join("");
+
+  statsPanelContentElement.innerHTML = `
+    <div class="stats-grid">
+      <div class="stats-card">
+        <span class="stats-card-label">Modo</span>
+        <span class="stats-card-value">${mode}</span>
+      </div>
+      <div class="stats-card">
+        <span class="stats-card-label">Final</span>
+        <span class="stats-card-value">${reasonLabel}</span>
+      </div>
+      <div class="stats-card">
+        <span class="stats-card-label">Puntuacion</span>
+        <span class="stats-card-value">${gameState.score}</span>
+      </div>
+      <div class="stats-card">
+        <span class="stats-card-label">Record local</span>
+        <span class="stats-card-value">${gameState.bestScore}</span>
+      </div>
+      <div class="stats-card">
+        <span class="stats-card-label">Tiempo</span>
+        <span class="stats-card-value">${elapsedText}</span>
+      </div>
+      <div class="stats-card">
+        <span class="stats-card-label">Jugadas</span>
+        <span class="stats-card-value">${totalMoves}</span>
+      </div>
+      <div class="stats-card">
+        <span class="stats-card-label">Ficha maxima</span>
+        <span class="stats-card-value">${highestTile}</span>
+      </div>
+      <div class="stats-card">
+        <span class="stats-card-label">Puntos por jugada</span>
+        <span class="stats-card-value">${averageScore}</span>
+      </div>
+    </div>
+    <div class="stats-section">
+      <h4>Resumen rapido</h4>
+      <div class="stats-list">
+        <div class="stats-list-row">
+          <span>Logros de 128 o mas</span>
+          <span>${achievementCount}</span>
+        </div>
+        <div class="stats-list-row">
+          <span>Mayor logro anotado</span>
+          <span>${biggestAchievement || "-"}</span>
+        </div>
+        <div class="stats-list-row">
+          <span>Movimientos en replay</span>
+          <span>${currentReplay?.turns?.length || 0}</span>
+        </div>
+      </div>
+    </div>
+    <div class="stats-section">
+      <h4>Distribucion de movimientos</h4>
+      <div class="stats-list">
+        ${directionRows}
+      </div>
+    </div>
+  `;
 }
 
 function stopGameTimer() {
@@ -740,6 +867,7 @@ function startGame(options = {}) {
   discardReplayState();
   stopDemoMode();
   stopHoleMode({ keepStatus: true });
+  setStatsPanelOpen(false);
   setGameOverOverlay(false);
   setPauseOverlay(false);
   demoMode = demo;
@@ -778,6 +906,7 @@ function startGame(options = {}) {
   renderJournal();
   renderUndoHistory();
   renderRecords();
+  updateStatsButton();
   if (!demoMode) {
     clearSessionSnapshot();
   }
@@ -1468,6 +1597,7 @@ function render() {
   bestScoreElement.textContent = gameState.bestScore;
   applyScoreSizing(scoreElement, gameState.score);
   applyScoreSizing(bestScoreElement, gameState.bestScore);
+  updateStatsButton();
   const now = performance.now();
   const activeIds = new Set();
 
@@ -2350,6 +2480,7 @@ function submitGlobalRecord() {
 }
 
 async function openReplayViewer(replay, record) {
+  setStatsPanelOpen(false);
   replayViewerElement.classList.remove("hidden");
   replayMetaElement.textContent = `${record.initials} | ${record.mode} | ${record.score} puntos | ${record.displayDate}`;
   if (!replay && record?.replayParts) {
@@ -2403,6 +2534,7 @@ function discardReplayState() {
   replayControlsElement.classList.add("hidden");
   replayProgressElement.textContent = "";
   replayModeLabelElement.textContent = "STOP";
+  setStatsPanelOpen(false);
   setReplayVisualState(false);
   updateReplayArrow("");
   const boardFrame = document.querySelector(".board-frame");
@@ -3386,6 +3518,11 @@ saveGameButton.addEventListener("click", () => {
   if (demoMode || replayMode || initialsEntryState.active) return;
   setSaveSlotsPanelOpen(!saveSlotsPanelOpen);
 });
+showStatsButton?.addEventListener("click", () => {
+  if (!gameState.over || replayMode) return;
+  setStatsPanelOpen(true);
+});
+closeStatsButton?.addEventListener("click", () => setStatsPanelOpen(false));
 closeUndoButton.addEventListener("click", () => setUndoPanelOpen(false));
 closeSaveSlotsButton.addEventListener("click", () => setSaveSlotsPanelOpen(false));
 startAttractButton.addEventListener("click", startActualGame);

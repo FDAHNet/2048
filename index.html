@@ -84,21 +84,38 @@
             <p id="journal-subtitle">Logros de 128 o mas durante la partida.</p>
           </div>
           <div id="journal-list" class="journal-list"></div>
+          <div class="journal-footer">
+            <button id="show-stats-button" type="button" class="secondary-button journal-stats-button hidden">Mostrar Estadisticas de la partida</button>
+          </div>
         </aside>
         <div class="board-frame">
-          <div id="board" class="board" aria-label="Tablero de 2048"></div>
-          <div id="fx-layer" class="fx-layer" aria-hidden="true"></div>
-          <div id="replay-arrow-overlay" class="replay-arrow-overlay hidden" aria-hidden="true">
-            <div class="replay-arrow-shaft"></div>
-            <div class="replay-arrow-head"></div>
+          <div class="board-stage">
+            <div id="board" class="board" aria-label="Tablero de 2048"></div>
+            <div id="fx-layer" class="fx-layer" aria-hidden="true"></div>
+            <div id="replay-arrow-overlay" class="replay-arrow-overlay hidden" aria-hidden="true">
+              <div class="replay-arrow-shaft"></div>
+              <div class="replay-arrow-head"></div>
+            </div>
+            <div id="pause-overlay" class="pause-overlay hidden">
+              <span class="pause-title">PAUSA</span>
+              <span class="pause-subtitle">Pulsa SEGUIR para continuar</span>
+            </div>
+            <div id="game-over-overlay" class="game-over-overlay hidden">
+              <span class="game-over-title">GAME OVER</span>
+              <span id="game-over-reason" class="game-over-reason"></span>
+            </div>
           </div>
-          <div id="pause-overlay" class="pause-overlay hidden">
-            <span class="pause-title">PAUSA</span>
-            <span class="pause-subtitle">Pulsa SEGUIR para continuar</span>
-          </div>
-          <div id="game-over-overlay" class="game-over-overlay hidden">
-            <span class="game-over-title">GAME OVER</span>
-            <span id="game-over-reason" class="game-over-reason"></span>
+          <section id="stats-panel" class="stats-panel hidden" aria-labelledby="stats-title">
+            <div class="stats-panel-shell">
+              <button id="close-stats-button" type="button" class="stats-close-button" aria-label="Cerrar estadisticas">X</button>
+              <div class="stats-panel-head">
+                <p class="initials-eyebrow">Resumen</p>
+                <h3 id="stats-title">Estadisticas de la partida</h3>
+              </div>
+              <div id="stats-panel-content" class="stats-panel-content"></div>
+            </div>
+          </section>
+          <div id="stats-backdrop" class="stats-backdrop" aria-hidden="true"></div>
           </div>
         </div>
         <aside class="side-actions">
