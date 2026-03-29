@@ -546,7 +546,13 @@ async function handleAdminOverview(env, corsHeaders) {
   ]);
 
   const parsedPlayers = players.map(parsePlayerIssue).filter(Boolean).sort((a, b) => (b.credits - a.credits) || (b.bestScore - a.bestScore) || a.alias.localeCompare(b.alias));
-  const records = recordIssues.map(parseRecordIssue).filter(Boolean);
+  const records = recordIssues
+    .map(parseRecordIssue)
+    .filter(Boolean)
+    .sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
   const generatedAt = new Date().toISOString();
   const totalCredits = parsedPlayers.reduce((sum, player) => sum + player.credits, 0);
   const totalGamesPlayed = parsedPlayers.reduce((sum, player) => sum + player.gamesPlayed, 0);
@@ -598,6 +604,13 @@ async function handleAdminOverview(env, corsHeaders) {
       lastSeen: player.lastSeen,
       createdAt: player.createdAt,
       updatedAt: player.updatedAt,
+    })),
+    records: records.map((record) => ({
+      initials: record.initials,
+      mode: record.mode,
+      category: record.category,
+      score: record.score,
+      createdAt: record.createdAt,
     })),
     recordsByMode,
     betDefinitions,
@@ -831,7 +844,7 @@ function parseRecordIssue(issue) {
   const category = body.match(/Category:\s*(normal|hole)/i)?.[1]?.toLowerCase() || 'normal';
   const score = Number(body.match(/Score:\s*([0-9]+)/i)?.[1] || issue.title.match(/-\s*([0-9]+)\s*-/)?.[1] || 0);
   if (!ALLOWED_MODES.has(mode) || !ALLOWED_CATEGORIES.has(category) || !Number.isFinite(score)) return null;
-  return { initials, mode, category, score };
+  return { initials, mode, category, score, createdAt: issue.created_at };
 }
 
 function readIssueInt(body, label) {
@@ -935,6 +948,7 @@ function json(data, status, headers) {
     },
   });
 }
+
 
 
 

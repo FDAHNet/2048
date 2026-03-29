@@ -389,7 +389,21 @@
             <div class="admin-card-head">
               <h3>Records Globales</h3>
             </div>
-            <div id="admin-records-grid" class="admin-records-grid"></div>
+            <div class="admin-table-wrap">
+              <table class="admin-table admin-records-table">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Fecha</th>
+                    <th>Modo</th>
+                    <th>Categoria</th>
+                    <th>Jugador</th>
+                    <th>Puntos</th>
+                  </tr>
+                </thead>
+                <tbody id="admin-records-body"></tbody>
+              </table>
+            </div>
           </section>
           <section class="admin-card admin-card-wide">
             <div class="admin-card-head">
@@ -408,6 +422,7 @@
                     <th>Pagado</th>
                     <th>Mejor</th>
                     <th>Ultimo acceso</th>
+                    <th>Accion</th>
                   </tr>
                 </thead>
                 <tbody id="admin-users-body"></tbody>
@@ -415,34 +430,36 @@
             </div>
           </section>
         </div>
-        <section id="admin-user-panel" class="admin-card admin-user-panel hidden">
-          <div class="admin-card-head">
-            <h3>Ficha de Usuario</h3>
-            <div class="admin-panel-actions">
-              <button id="admin-user-refresh-button" type="button" class="secondary-button">Refrescar</button>
-              <button id="admin-user-close-button" type="button" class="stats-close-button" aria-label="Cerrar ficha de usuario">X</button>
+        <section id="admin-user-panel" class="admin-user-panel hidden" aria-labelledby="admin-user-title">
+          <div class="admin-user-panel-card admin-card">
+            <div class="admin-card-head">
+              <h3 id="admin-user-title">Ficha de Usuario</h3>
+              <div class="admin-panel-actions">
+                <button id="admin-user-refresh-button" type="button" class="secondary-button">Refrescar</button>
+                <button id="admin-user-close-button" type="button" class="stats-close-button" aria-label="Cerrar ficha de usuario">X</button>
+              </div>
             </div>
-          </div>
-          <div id="admin-user-summary-grid" class="admin-summary-grid admin-user-summary-grid"></div>
-          <div class="admin-user-credits-tools">
-            <input id="admin-user-credit-delta" type="number" min="1" step="1" value="10" aria-label="Cantidad de creditos">
-            <button id="admin-user-add-credits-button" type="button">Sumar creditos</button>
-            <button id="admin-user-subtract-credits-button" type="button" class="danger-button">Restar creditos</button>
-          </div>
-          <div id="admin-user-status" class="admin-panel-status">Pulsa sobre un usuario para ver su ficha completa.</div>
-          <div class="admin-table-wrap">
-            <table class="admin-table admin-user-ledger-table">
-              <thead>
-                <tr>
-                  <th>Fecha</th>
-                  <th>Tipo</th>
-                  <th>Detalle</th>
-                  <th>Importe</th>
-                  <th>Saldo</th>
-                </tr>
-              </thead>
-              <tbody id="admin-user-ledger-body"></tbody>
-            </table>
+            <div id="admin-user-summary-grid" class="admin-summary-grid admin-user-summary-grid"></div>
+            <div class="admin-user-credits-tools">
+              <input id="admin-user-credit-delta" type="number" min="1" step="1" value="10" aria-label="Cantidad de creditos">
+              <button id="admin-user-add-credits-button" type="button">Sumar creditos</button>
+              <button id="admin-user-subtract-credits-button" type="button" class="danger-button">Restar creditos</button>
+            </div>
+            <div id="admin-user-status" class="admin-panel-status">Pulsa sobre un usuario para ver su ficha completa.</div>
+            <div class="admin-table-wrap">
+              <table class="admin-table admin-user-ledger-table">
+                <thead>
+                  <tr>
+                    <th>Fecha</th>
+                    <th>Tipo</th>
+                    <th>Detalle</th>
+                    <th>Importe</th>
+                    <th>Saldo</th>
+                  </tr>
+                </thead>
+                <tbody id="admin-user-ledger-body"></tbody>
+              </table>
+            </div>
           </div>
         </section>
       </div>

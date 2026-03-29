@@ -2528,6 +2528,10 @@ button:hover {
   padding: 7px 10px;
 }
 
+.admin-records-table {
+  min-width: 760px;
+}
+
 .ledger-panel-shell {
   max-width: 1040px;
 }
@@ -2547,8 +2551,20 @@ button:hover {
 }
 
 .admin-user-panel {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
   display: grid;
-  gap: 14px;
+  place-items: center;
+  padding: 28px;
+  background: rgba(8, 7, 12, 0.76);
+  backdrop-filter: blur(10px);
+}
+
+.admin-user-panel-card {
+  width: min(1080px, calc(100vw - 120px));
+  max-height: calc(86vh - 56px);
+  overflow: hidden;
 }
 
 .admin-user-summary-grid {
@@ -2574,6 +2590,10 @@ button:hover {
 
 .admin-user-ledger-table {
   min-width: 760px;
+}
+
+.admin-user-open-action {
+  white-space: nowrap;
 }
 
 .hidden {
@@ -2799,6 +2819,15 @@ button:hover {
 
   .admin-user-summary-grid {
     grid-template-columns: 1fr;
+  }
+
+  .admin-user-panel {
+    padding: 12px;
+  }
+
+  .admin-user-panel-card {
+    width: calc(100vw - 24px);
+    max-height: calc(100vh - 24px);
   }
 
   body {

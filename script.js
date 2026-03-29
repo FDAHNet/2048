@@ -118,7 +118,7 @@ const statsPanelContentElement = document.getElementById("stats-panel-content");
 const closeStatsButton = document.getElementById("close-stats-button");
 const adminPanelElement = document.getElementById("admin-panel");
 const adminSummaryGridElement = document.getElementById("admin-summary-grid");
-const adminRecordsGridElement = document.getElementById("admin-records-grid");
+const adminRecordsBodyElement = document.getElementById("admin-records-body");
 const adminUsersBodyElement = document.getElementById("admin-users-body");
 const adminPanelStatusElement = document.getElementById("admin-panel-status");
 const closeAdminButton = document.getElementById("close-admin-button");
@@ -918,12 +918,13 @@ function escapeHtml(value) {
 }
 
 function renderAdminOverview() {
-  if (!adminSummaryGridElement || !adminRecordsGridElement || !adminUsersBodyElement || !adminPanelStatusElement) return;
+  if (!adminSummaryGridElement || !adminRecordsBodyElement || !adminUsersBodyElement || !adminPanelStatusElement) return;
 
   if (!adminOverview) {
     adminSummaryGridElement.innerHTML = "";
-    adminRecordsGridElement.innerHTML = "";
-    adminUsersBodyElement.innerHTML = '<tr><td class="admin-table-empty" colspan="9">Sin datos todavia.</td></tr>';
+    adminRecordsBodyElement.innerHTML = '<tr><td class="admin-table-empty" colspan="6">Cargando records...</td></tr>';
+    adminUsersBodyElement.innerHTML = '<tr><td class="admin-table-empty" colspan="10">Sin datos todavia.</td></tr>';
+    renderAdminUserPanel();
     if (adminBetsBodyElement) {
       adminBetsBodyElement.innerHTML = '<tr><td class="admin-table-empty" colspan="9">Cargando tipos de apuesta...</td></tr>';
     }
@@ -931,7 +932,7 @@ function renderAdminOverview() {
     return;
   }
 
-  const { summary = {}, players = [], recordsByMode = {}, betDefinitions = [] } = adminOverview;
+  const { summary = {}, players = [], records = [], betDefinitions = [] } = adminOverview;
   adminPanelStatusElement.textContent = `Actualizado: ${formatAdminDate(summary.generatedAt)}. Usuarios ${formatAdminNumber(summary.totalUsers)}.`;
 
   const summaryCards = [
@@ -949,25 +950,30 @@ function renderAdminOverview() {
     </article>
   `).join("");
 
-  adminRecordsGridElement.innerHTML = GLOBAL_MODES.flatMap((mode) => RECORD_CATEGORIES.map((category) => {
-    const entry = recordsByMode?.[mode]?.[category] || {};
-    return `
-      <article class="admin-record-card">
-        <small>${escapeHtml(mode)} · ${escapeHtml(RECORD_CATEGORY_LABELS[category])}</small>
-        <strong>${escapeHtml(formatAdminNumber(entry.bestScore || 0))}</strong>
-        <span>${escapeHtml(entry.bestInitials || "---")} · ${escapeHtml(formatAdminNumber(entry.count || 0))} records</span>
-      </article>
-    `;
-  })).join("");
+  if (!records.length) {
+    adminRecordsBodyElement.innerHTML = '<tr><td class="admin-table-empty" colspan="6">Todavia no hay records globales.</td></tr>';
+  } else {
+    adminRecordsBodyElement.innerHTML = records.map((record, index) => `
+      <tr>
+        <td>${escapeHtml(index + 1)}</td>
+        <td>${escapeHtml(formatAdminDate(record.createdAt))}</td>
+        <td>${escapeHtml(record.mode)}</td>
+        <td>${escapeHtml(RECORD_CATEGORY_LABELS[normalizeRecordCategory(record.category)] || "Normal")}</td>
+        <td>${escapeHtml(record.initials)}</td>
+        <td>${escapeHtml(formatAdminNumber(record.score))}</td>
+      </tr>
+    `).join("");
+  }
 
   if (!players.length) {
-    adminUsersBodyElement.innerHTML = '<tr><td class="admin-table-empty" colspan="9">Todavia no hay jugadores avanzados.</td></tr>';
+    adminUsersBodyElement.innerHTML = '<tr><td class="admin-table-empty" colspan="10">Todavia no hay jugadores avanzados.</td></tr>';
+    renderAdminUserPanel();
     return;
   }
 
   adminUsersBodyElement.innerHTML = players.map((player) => `
-    <tr class="admin-clickable-row" data-admin-alias="${escapeHtml(player.alias)}">
-      <td><button type="button" class="admin-user-open-button" data-admin-alias="${escapeHtml(player.alias)}">${escapeHtml(player.alias)}</button></td>
+    <tr>
+      <td><button type="button" class="admin-user-open-button" data-admin-open="${escapeHtml(player.alias)}">${escapeHtml(player.alias)}</button></td>
       <td>${escapeHtml(formatAdminNumber(player.credits))}</td>
       <td>${escapeHtml(formatAdminNumber(player.gamesPlayed))}</td>
       <td>${escapeHtml(formatAdminNumber(player.normalGames))}</td>
@@ -976,6 +982,7 @@ function renderAdminOverview() {
       <td>${escapeHtml(formatAdminNumber(player.totalPayout))}</td>
       <td>${escapeHtml(formatAdminNumber(player.bestScore))}</td>
       <td>${escapeHtml(formatAdminDate(player.lastSeen))}</td>
+      <td class="admin-user-open-action"><button type="button" class="secondary-button" data-admin-open="${escapeHtml(player.alias)}">Ver ficha</button></td>
     </tr>
   `).join("");
 
@@ -990,8 +997,8 @@ function renderAdminOverview() {
 function handleAdminUserTableClick(event) {
   const target = event.target;
   if (!(target instanceof Element)) return;
-  const row = target.closest("[data-admin-alias]");
-  const alias = row?.getAttribute("data-admin-alias");
+  const trigger = target.closest("[data-admin-open]");
+  const alias = trigger?.getAttribute("data-admin-open");
   if (alias) void loadAdminUser(alias, true);
 }
 
