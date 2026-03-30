@@ -1989,8 +1989,60 @@ button:hover {
 .tile-value-256 { background: linear-gradient(145deg, #8cafff, #6990ff); color: #eff4ff; }
 .tile-value-512 { background: linear-gradient(145deg, #c8b6ff, #a47bff); color: #160b2b; }
 .tile-value-1024 { background: linear-gradient(145deg, #ff99c8, #ff77aa); color: #420622; }
-.tile-value-2048,
-.tile-value-super { background: linear-gradient(145deg, #ffffff, #d6fff6); color: #03352d; }
+.tile-value-2048 {
+  background:
+    radial-gradient(circle at 28% 24%, rgba(255,255,255,0.92), rgba(255,255,255,0) 34%),
+    linear-gradient(145deg, #fff3a6, #ffc84d 52%, #ff8a5b);
+  color: #402100;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.5),
+    0 0 18px rgba(255, 208, 90, 0.5),
+    0 18px 26px rgba(0, 0, 0, 0.24);
+}
+.tile-value-super {
+  background:
+    radial-gradient(circle at 30% 24%, rgba(255,255,255,0.95), rgba(255,255,255,0) 32%),
+    linear-gradient(145deg, #fff0fb, #d9fffb 55%, #9ffcff);
+  color: #073540;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.48),
+    0 0 18px rgba(143, 243, 255, 0.45),
+    0 18px 26px rgba(0, 0, 0, 0.24);
+}
+.tile-value-super-4096 {
+  background:
+    radial-gradient(circle at 28% 22%, rgba(255,255,255,0.96), rgba(255,255,255,0) 30%),
+    linear-gradient(145deg, #ffe5fa, #f8a7ff 48%, #79e7ff);
+  color: #2a073d;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.5),
+    0 0 22px rgba(240, 145, 255, 0.42),
+    0 0 38px rgba(121, 231, 255, 0.24),
+    0 18px 26px rgba(0, 0, 0, 0.24);
+}
+.tile-value-super-8192 {
+  background:
+    radial-gradient(circle at 28% 22%, rgba(255,255,255,0.96), rgba(255,255,255,0) 30%),
+    linear-gradient(145deg, #e9f4ff, #7fd8ff 42%, #7a8cff 70%, #f59dff);
+  color: #071c45;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.52),
+    0 0 24px rgba(127, 216, 255, 0.4),
+    0 0 44px rgba(122, 140, 255, 0.24),
+    0 18px 26px rgba(0, 0, 0, 0.24);
+}
+.tile-value-super-16384 {
+  background:
+    radial-gradient(circle at 28% 22%, rgba(255,255,255,0.98), rgba(255,255,255,0) 28%),
+    linear-gradient(145deg, #fff8dd, #ffe16b 28%, #ff9f6e 52%, #ff72d2 76%, #73ebff);
+  color: #3b1600;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.56),
+    0 0 26px rgba(255, 212, 89, 0.44),
+    0 0 50px rgba(115, 235, 255, 0.24),
+    0 18px 26px rgba(0, 0, 0, 0.24);
+  animation: tile-super-prism 2.2s linear infinite;
+}
 
 .tile-new {
   animation: spawn 220ms cubic-bezier(0.18, 0.89, 0.32, 1.28);
@@ -2867,6 +2919,11 @@ button:hover {
 @keyframes epic-glow {
   from { filter: saturate(1) brightness(1); }
   to { filter: saturate(1.2) brightness(1.12); }
+}
+
+@keyframes tile-super-prism {
+  0% { filter: hue-rotate(0deg) saturate(1); }
+  100% { filter: hue-rotate(360deg) saturate(1.08); }
 }
 
 @keyframes aurora-spin {

@@ -2111,6 +2111,21 @@ function applyTileTextSizing(element, value) {
   element.style.letterSpacing = digits >= 4 ? "-0.05em" : "0";
 }
 
+function getTileValueClasses(value) {
+  const classes = [`tile-value-${Math.min(value, 2048)}`];
+  if (value > 2048) {
+    classes.push("tile-value-super");
+    if (value >= 16384) {
+      classes.push("tile-value-super-16384");
+    } else if (value >= 8192) {
+      classes.push("tile-value-super-8192");
+    } else if (value >= 4096) {
+      classes.push("tile-value-super-4096");
+    }
+  }
+  return classes.join(" ");
+}
+
 function addRandomTile() {
   const empty = [];
   for (let row = 0; row < boardSize; row += 1) {
@@ -3007,7 +3022,7 @@ function render() {
         boardElement.appendChild(element);
       }
 
-      element.className = `tile tile-value-${Math.min(tile.value, 2048)} ${tile.value > 2048 ? "tile-value-super" : ""}`.trim();
+      element.className = `tile ${getTileValueClasses(tile.value)}`.trim();
       if (tile.isNew) element.classList.add("tile-new");
       if (tile.justMerged) element.classList.add("tile-merged");
       if (tile.effectUntil > now) element.classList.add("tile-epic");
@@ -4852,7 +4867,7 @@ function createReplaySpawnPulse(row, col) {
 
 function createMergeGhost({ fromRow, fromCol, toRow, toCol, value }) {
   const ghost = document.createElement("div");
-  ghost.className = `tile tile-value-${Math.min(value, 2048)} ${value > 2048 ? "tile-value-super" : ""}`.trim();
+  ghost.className = `tile ${getTileValueClasses(value)}`.trim();
   ghost.textContent = value;
   applyTileTextSizing(ghost, value);
   positionTileElement(ghost, fromRow, fromCol);
