@@ -627,8 +627,7 @@ function getMusicTrackUrl(track) {
 function ensureMusicAudioElement() {
   if (musicAudioElement) return musicAudioElement;
   musicAudioElement = new Audio();
-  musicAudioElement.preload = "metadata";
-  musicAudioElement.crossOrigin = "anonymous";
+  musicAudioElement.preload = "auto";
   musicAudioElement.addEventListener("loadedmetadata", () => {
     renderMusicInfo();
   });
