@@ -4,3 +4,7 @@ compatibility_date = "2026-03-28"
 
 [observability]
 enabled = true
+
+[[r2_buckets]]
+binding = "REPLAY_BUCKET"
+bucket_name = "angeloso-2048-replays"

@@ -6,6 +6,9 @@ const EFFECT_DURATION = 5000;
 const MAX_SAFE_SLOT_REPLAY_TURNS = 120000;
 const MAX_SAFE_RECORD_REPLAY_TURNS = 500000;
 const MAX_SAFE_RECORD_REPLAY_BYTES = 3_200_000;
+const MAX_WORKER_DIRECT_REPLAY_BYTES = 2_200_000;
+const REMOTE_REPLAY_CHUNK_BYTES = 320_000;
+const MAX_REMOTE_REPLAY_PARTS = 4_000;
 const STORAGE_PREFIX = "smooth-2048-best-score";
 const RECORDS_PREFIX = "smooth-2048-records";
 const MAX_RECORDS_PER_MODE = 10;
@@ -3425,6 +3428,49 @@ function buildTruncatedReplayPayload(replay, options = {}) {
   return payload;
 }
 
+function buildReplayRefId(recordMeta) {
+  const modeSlug = String(recordMeta?.mode || "4x4").replace(/[^0-9]/g, "");
+  const categorySlug = normalizeRecordCategory(recordMeta?.category || "normal");
+  const initialsSlug = normalizeInitials(recordMeta?.initials || "???");
+  const randomPart = Math.random().toString(36).slice(2, 10);
+  return `replay-${modeSlug}-${categorySlug}-${initialsSlug}-${Date.now().toString(36)}-${randomPart}`.toLowerCase();
+}
+
+function chunkReplayString(value, chunkSize) {
+  const chunks = [];
+  for (let index = 0; index < value.length; index += chunkSize) {
+    chunks.push(value.slice(index, index + chunkSize));
+  }
+  return chunks;
+}
+
+async function uploadReplayToWorker(replayPayload, recordMeta) {
+  const replayJson = JSON.stringify(replayPayload);
+  const chunks = chunkReplayString(replayJson, REMOTE_REPLAY_CHUNK_BYTES);
+  if (!chunks.length) return null;
+  if (chunks.length > MAX_REMOTE_REPLAY_PARTS) {
+    throw new Error("Replay demasiado grande incluso por bloques");
+  }
+
+  const replayId = buildReplayRefId(recordMeta);
+  for (let index = 0; index < chunks.length; index += 1) {
+    await postWorkerJson("/replay/upload", {
+      replayId,
+      mode: recordMeta.mode,
+      partIndex: index,
+      partCount: chunks.length,
+      chunk: chunks[index],
+    });
+  }
+
+  return {
+    storage: "r2",
+    replayId,
+    parts: chunks.length,
+    mode: recordMeta.mode,
+  };
+}
+
 function buildSafeReplayPayload(replay, options = {}) {
   if (!replay) return { payload: null, truncated: false };
   const {
@@ -3532,13 +3578,13 @@ function resolveReplayForRecord(record) {
   if (record?.replay) return decodeReplayPayload(record.replay);
   if (
     pendingGlobalRecord
-    && pendingGlobalRecord.replay
     && pendingGlobalRecord.initials === record.initials
     && pendingGlobalRecord.score === record.score
     && pendingGlobalRecord.mode === record.mode
     && normalizeRecordCategory(pendingGlobalRecord.category) === normalizeRecordCategory(record.category)
   ) {
-    return decodeReplayPayload(pendingGlobalRecord.replay);
+    if (pendingGlobalRecord.fullReplay) return decodeReplayPayload(pendingGlobalRecord.fullReplay);
+    if (pendingGlobalRecord.replay) return decodeReplayPayload(pendingGlobalRecord.replay);
   }
   return null;
 }
@@ -4133,6 +4179,8 @@ function parseGlobalRecord(issue) {
   const scoreText = body.match(/Score:\s*([0-9]+)/i)?.[1];
   const replayMatch = body.match(/```json\s*([\s\S]*?)```/i);
   const replayParts = Number(body.match(/Replay Parts:\s*([0-9]+)/i)?.[1] || 0);
+  const replayStorage = (body.match(/Replay Storage:\s*(inline|comments|r2)/i)?.[1] || "inline").toLowerCase();
+  const replayId = body.match(/Replay Ref:\s*([A-Za-z0-9_-]+)/i)?.[1] || "";
   const score = Number(scoreText);
 
   if (!initials || !mode || !Number.isFinite(score)) return null;
@@ -4155,6 +4203,13 @@ function parseGlobalRecord(issue) {
     issueNumber: issue.number,
     commentsUrl: issue.comments_url,
     replayParts,
+    replayStorage,
+    replayRef: replayStorage === "r2" && replayId ? {
+      storage: "r2",
+      replayId,
+      parts: replayParts || 1,
+      mode,
+    } : null,
     displayDate: new Intl.DateTimeFormat("es-ES", {
       dateStyle: "short",
       timeStyle: "short",
@@ -4175,6 +4230,15 @@ function parseReplayChunkComment(body) {
 
 async function fetchReplayForRecord(record) {
   if (record?.replay) return record.replay;
+  if (record?.replayRef?.storage === "r2" && record?.replayRef?.replayId) {
+    const body = await postWorkerJson("/replay/fetch", {
+      replayId: record.replayRef.replayId,
+      mode: record.mode,
+    });
+    const replay = decodeReplayPayload(body.replay);
+    record.replay = replay;
+    return replay;
+  }
   if (!record?.replayParts || !record?.commentsUrl) return null;
 
   const comments = [];
@@ -4367,6 +4431,7 @@ function moveInitialsCursor(deltaRow, deltaCol) {
 function savePendingRecord(forcedInitials = null) {
   const initials = normalizeInitials(forcedInitials || initialsEntryState.letters.join("") || "???").padEnd(3, "?");
   const now = new Date();
+  const isoDate = now.toISOString();
   const displayDate = new Intl.DateTimeFormat("es-ES", {
     dateStyle: "short",
     timeStyle: "short",
@@ -4374,11 +4439,18 @@ function savePendingRecord(forcedInitials = null) {
   const replayBuild = currentReplay
     ? buildSafeReplayPayload(currentReplay, {
         target: "record",
-        finishedAt: now.toISOString(),
+        finishedAt: isoDate,
         finalScore: initialsEntryState.pendingScore,
         initials,
       })
     : { payload: null, truncated: false };
+  const fullReplayPayload = currentReplay
+    ? encodeReplayPayload(currentReplay, {
+        finishedAt: isoDate,
+        finalScore: initialsEntryState.pendingScore,
+        initials,
+      })
+    : null;
   const replayPayload = replayBuild.payload;
 
   const records = loadRecords();
@@ -4405,9 +4477,11 @@ function savePendingRecord(forcedInitials = null) {
     mode: `${boardSize}x${boardSize}`,
     category: getCurrentRecordCategory(),
     score: initialsEntryState.pendingScore,
-    isoDate: now.toISOString(),
+    isoDate,
     displayDate,
     replay: replayPayload,
+    fullReplay: fullReplayPayload,
+    replayRef: null,
   };
   const currentTopScore = getTopScoreForMode(pendingGlobalRecord.mode, pendingGlobalRecord.category);
   const isGlobalTopScore = pendingGlobalRecord.score > currentTopScore;
@@ -4452,56 +4526,67 @@ function buildGlobalRecordIssueUrl() {
   return `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/issues/new?labels=${encodeURIComponent(GLOBAL_RECORD_LABEL)}&title=${encodeURIComponent(title)}&body=${encodeURIComponent(body)}`;
 }
 
-function submitGlobalRecord() {
+async function submitGlobalRecord() {
   if (!pendingGlobalRecord) return;
   if (!WORKER_API_URL) {
     setStatus("Falta configurar la URL del worker de Cloudflare.");
     return;
   }
 
+  const recordToSubmit = pendingGlobalRecord;
   setStatus("Enviando record global...");
 
-  fetch(WORKER_API_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(pendingGlobalRecord),
-  })
-    .then(async (response) => {
-      if (!response.ok) {
-        const errorPayload = await response.json().catch(() => ({}));
-        const details = typeof errorPayload.details === "string"
-          ? errorPayload.details.replace(/\s+/g, " ").slice(0, 180)
-          : "";
-        throw new Error([errorPayload.error || "No se pudo enviar el record", details].filter(Boolean).join(": "));
-      }
-      return response.json();
-    })
-    .then(() => {
-      mergeGlobalRecordIntoCache(pendingGlobalRecord);
-      renderGlobalRecords(globalRecordsCache);
-      const submittedMode = pendingGlobalRecord.mode;
-      pendingGlobalRecord = null;
-      setStatus("Record global enviado correctamente.");
-      window.setTimeout(() => {
-        fetchGlobalRecords();
-        if (expandedRecordsMode === submittedMode) {
-          renderGlobalRecords(globalRecordsCache);
-        }
-      }, 6000);
-    })
-    .catch((error) => {
-      setStatus(`Error al enviar record: ${error.message}`);
+  try {
+    let replayRef = null;
+    let replayForSubmission = recordToSubmit.fullReplay || recordToSubmit.replay || null;
+    const replayBytes = replayForSubmission ? estimateReplayPayloadBytes(replayForSubmission) : 0;
+
+    if (replayForSubmission && replayBytes > MAX_WORKER_DIRECT_REPLAY_BYTES) {
+      setStatus("Subiendo replay completa por bloques...");
+      replayRef = await uploadReplayToWorker(replayForSubmission, recordToSubmit);
+      replayForSubmission = null;
+    }
+
+    const response = await postWorkerJson("", {
+      initials: recordToSubmit.initials,
+      mode: recordToSubmit.mode,
+      category: normalizeRecordCategory(recordToSubmit.category),
+      score: recordToSubmit.score,
+      isoDate: recordToSubmit.isoDate,
+      replay: replayForSubmission,
+      replayRef,
     });
+
+    if (replayRef) {
+      recordToSubmit.replayRef = replayRef;
+    }
+
+    mergeGlobalRecordIntoCache({
+      ...recordToSubmit,
+      replayRef: replayRef || recordToSubmit.replayRef || null,
+      replay: replayForSubmission || recordToSubmit.fullReplay || recordToSubmit.replay || null,
+    });
+    renderGlobalRecords(globalRecordsCache);
+    const submittedMode = recordToSubmit.mode;
+    pendingGlobalRecord = null;
+    setStatus(replayRef ? "Record global enviado con replay completa." : "Record global enviado correctamente.");
+    window.setTimeout(() => {
+      fetchGlobalRecords();
+      if (expandedRecordsMode === submittedMode) {
+        renderGlobalRecords(globalRecordsCache);
+      }
+    }, 6000);
+  } catch (error) {
+    setStatus(`Error al enviar record: ${error.message}`);
+  }
 }
 
 async function openReplayViewer(replay, record) {
   setStatsPanelOpen(false);
   replayViewerElement.classList.remove("hidden");
   replayMetaElement.textContent = `${record.initials} | ${record.mode} | ${record.score} puntos | ${record.displayDate}`;
-  if (!replay && record?.replayParts) {
-    replayEmptyElement.textContent = "Cargando replay desde GitHub...";
+  if (!replay && (record?.replayParts || record?.replayRef)) {
+    replayEmptyElement.textContent = record?.replayRef ? "Cargando replay completa desde Cloudflare..." : "Cargando replay desde GitHub...";
     replayEmptyElement.classList.remove("hidden");
     replayControlsElement.classList.add("hidden");
     setStatus("Cargando replay...");

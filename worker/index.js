@@ -12,6 +12,8 @@ const MAX_REQUEST_BYTES = 4_000_000;
 const MAX_ISSUE_BODY = 62_000;
 const MAX_REPLAY_CHUNK = 56_000;
 const MAX_REPLAY_PARTS = 180;
+const MAX_R2_REPLAY_CHUNK = 350_000;
+const MAX_R2_REPLAY_PARTS = 4_000;
 const MAX_SCORE = 1_000_000_000_000;
 const MAX_REPLAY_TURNS = 600_000;
 const DEFAULT_PLAYER_CREDITS = 100;
@@ -116,12 +118,13 @@ export default {
       if (url.pathname === '/admin/player/credits') return await handleAdminPlayerCredits(payload, env, corsHeaders);
       if (url.pathname === '/admin/bets/save') return await handleAdminBetsSave(payload, env, corsHeaders);
       if (url.pathname === '/admin/overview') return await handleAdminOverview(env, corsHeaders);
+      if (url.pathname === '/replay/upload') return await handleReplayUpload(payload, env, corsHeaders);
+      if (url.pathname === '/replay/fetch') return await handleReplayFetch(payload, env, corsHeaders);
 
       const validation = validatePayload(payload);
       if (validation) return json({ error: validation }, 400, corsHeaders);
 
       const title = `[Record] ${payload.initials} - ${payload.score} - ${payload.mode} - ${payload.category.toUpperCase()}`;
-      const replayJson = JSON.stringify(payload.replay);
       const baseLines = [
         'New global score submission',
         '',
@@ -132,25 +135,40 @@ export default {
         `Date: ${payload.isoDate}`,
       ];
 
-      const inlineBody = [...baseLines, '', 'Replay Storage: inline', 'Replay Parts: 1', '', 'Replay JSON:', '```json', replayJson, '```'].join('\n');
       let issue;
 
-      if (inlineBody.length <= MAX_ISSUE_BODY) {
-        issue = await createIssue(env, title, inlineBody, [GITHUB_LABEL]);
-      } else {
-        const chunks = chunkString(replayJson, MAX_REPLAY_CHUNK);
-        if (chunks.length > MAX_REPLAY_PARTS) {
-          return json({ error: 'Replay too large to store safely' }, 413, corsHeaders);
-        }
-        const issueBody = [...baseLines, '', 'Replay Storage: comments', `Replay Parts: ${chunks.length}`, '', 'Replay JSON is stored across issue comments.'].join('\n');
+      if (payload.replayRef) {
+        const issueBody = [
+          ...baseLines,
+          '',
+          'Replay Storage: r2',
+          `Replay Ref: ${payload.replayRef.replayId}`,
+          `Replay Parts: ${payload.replayRef.parts}`,
+          '',
+          'Replay JSON is stored in Cloudflare R2 via worker chunks.',
+        ].join('\n');
         issue = await createIssue(env, title, issueBody, [GITHUB_LABEL]);
-        for (let index = 0; index < chunks.length; index += 1) {
-          const commentBody = [`Replay Part ${index + 1}/${chunks.length}`, '```json', chunks[index], '```'].join('\n');
-          await createIssueComment(env, issue.number, commentBody);
+      } else {
+        const replayJson = JSON.stringify(payload.replay);
+        const inlineBody = [...baseLines, '', 'Replay Storage: inline', 'Replay Parts: 1', '', 'Replay JSON:', '```json', replayJson, '```'].join('\n');
+
+        if (inlineBody.length <= MAX_ISSUE_BODY) {
+          issue = await createIssue(env, title, inlineBody, [GITHUB_LABEL]);
+        } else {
+          const chunks = chunkString(replayJson, MAX_REPLAY_CHUNK);
+          if (chunks.length > MAX_REPLAY_PARTS) {
+            return json({ error: 'Replay too large to store safely' }, 413, corsHeaders);
+          }
+          const issueBody = [...baseLines, '', 'Replay Storage: comments', `Replay Parts: ${chunks.length}`, '', 'Replay JSON is stored across issue comments.'].join('\n');
+          issue = await createIssue(env, title, issueBody, [GITHUB_LABEL]);
+          for (let index = 0; index < chunks.length; index += 1) {
+            const commentBody = [`Replay Part ${index + 1}/${chunks.length}`, '```json', chunks[index], '```'].join('\n');
+            await createIssueComment(env, issue.number, commentBody);
+          }
         }
       }
 
-      return json({ ok: true, issueUrl: issue.html_url }, 200, corsHeaders);
+      return json({ ok: true, issueUrl: issue.html_url, replayRef: payload.replayRef || null }, 200, corsHeaders);
     } catch (error) {
       return json({ error: 'GitHub issue creation failed', details: error.message || String(error) }, 502, corsHeaders);
     }
@@ -183,8 +201,101 @@ function validatePayload(payload) {
   const score = Number(payload.score);
   if (!Number.isFinite(score) || score <= 0 || score > MAX_SCORE) return 'Score is invalid';
   if (!payload.isoDate || Number.isNaN(Date.parse(payload.isoDate))) return 'Date is required';
+  if (payload.replayRef) return validateReplayRef(payload.replayRef, payload.mode);
   if (!payload.replay || typeof payload.replay !== 'object') return 'Replay is required';
   return validateReplay(payload.replay, payload.mode);
+}
+
+function validateReplayRef(replayRef, mode) {
+  if (!replayRef || typeof replayRef !== 'object') return 'Replay reference is invalid';
+  if (replayRef.storage !== 'r2') return 'Replay storage is invalid';
+  if (!/^[a-z0-9][a-z0-9_-]{7,127}$/i.test(replayRef.replayId || '')) return 'Replay reference is invalid';
+  const parts = Number(replayRef.parts);
+  if (!Number.isInteger(parts) || parts <= 0 || parts > MAX_R2_REPLAY_PARTS) return 'Replay parts are invalid';
+  if (!ALLOWED_MODES.has(replayRef.mode || mode || '')) return 'Replay mode mismatch';
+  return '';
+}
+
+function validateReplayUploadPayload(payload) {
+  if (!payload || typeof payload !== 'object') return 'Payload is required';
+  if (!/^[a-z0-9][a-z0-9_-]{7,127}$/i.test(payload.replayId || '')) return 'Replay id is invalid';
+  if (!ALLOWED_MODES.has(payload.mode || '')) return 'Mode is invalid';
+  const partIndex = Number(payload.partIndex);
+  const partCount = Number(payload.partCount);
+  if (!Number.isInteger(partIndex) || partIndex < 0 || partIndex >= MAX_R2_REPLAY_PARTS) return 'Replay part index is invalid';
+  if (!Number.isInteger(partCount) || partCount <= 0 || partCount > MAX_R2_REPLAY_PARTS) return 'Replay part count is invalid';
+  if (partIndex >= partCount) return 'Replay part index is invalid';
+  if (typeof payload.chunk !== 'string' || !payload.chunk.length) return 'Replay chunk is invalid';
+  if (payload.chunk.length > MAX_R2_REPLAY_CHUNK) return 'Replay chunk is too large';
+  return '';
+}
+
+function validateReplayFetchPayload(payload) {
+  if (!payload || typeof payload !== 'object') return 'Payload is required';
+  if (!/^[a-z0-9][a-z0-9_-]{7,127}$/i.test(payload.replayId || '')) return 'Replay id is invalid';
+  if (!ALLOWED_MODES.has(payload.mode || '')) return 'Mode is invalid';
+  return '';
+}
+
+async function handleReplayUpload(payload, env, corsHeaders) {
+  const validation = validateReplayUploadPayload(payload);
+  if (validation) return json({ error: validation }, 400, corsHeaders);
+  if (!env.REPLAY_BUCKET) return json({ error: 'Replay bucket is not configured' }, 500, corsHeaders);
+
+  const metadata = {
+    mode: payload.mode,
+    partIndex: String(payload.partIndex),
+    partCount: String(payload.partCount),
+    updatedAt: new Date().toISOString(),
+  };
+  await env.REPLAY_BUCKET.put(getReplayChunkKey(payload.replayId, payload.partIndex), payload.chunk, {
+    httpMetadata: { contentType: 'application/json; charset=utf-8' },
+    customMetadata: metadata,
+  });
+
+  return json({
+    ok: true,
+    replayId: payload.replayId,
+    partIndex: Number(payload.partIndex),
+    partCount: Number(payload.partCount),
+  }, 200, corsHeaders);
+}
+
+async function handleReplayFetch(payload, env, corsHeaders) {
+  const validation = validateReplayFetchPayload(payload);
+  if (validation) return json({ error: validation }, 400, corsHeaders);
+  if (!env.REPLAY_BUCKET) return json({ error: 'Replay bucket is not configured' }, 500, corsHeaders);
+
+  const chunks = [];
+  for (let index = 0; index < MAX_R2_REPLAY_PARTS; index += 1) {
+    const object = await env.REPLAY_BUCKET.get(getReplayChunkKey(payload.replayId, index));
+    if (!object) {
+      if (!index) return json({ error: 'Replay not found' }, 404, corsHeaders);
+      break;
+    }
+    const chunk = await object.text();
+    chunks.push(chunk);
+    const expectedParts = Number(object.customMetadata?.partCount || 0);
+    if (expectedParts && chunks.length >= expectedParts) break;
+  }
+
+  if (!chunks.length) return json({ error: 'Replay not found' }, 404, corsHeaders);
+
+  let replay;
+  try {
+    replay = JSON.parse(chunks.join(''));
+  } catch {
+    return json({ error: 'Stored replay is corrupted' }, 500, corsHeaders);
+  }
+
+  const replayValidation = validateReplay(replay, payload.mode);
+  if (replayValidation) return json({ error: replayValidation }, 500, corsHeaders);
+
+  return json({ ok: true, replay }, 200, corsHeaders);
+}
+
+function getReplayChunkKey(replayId, chunkIndex) {
+  return `replays/${replayId}/${String(chunkIndex).padStart(4, '0')}.json`;
 }
 
 function validateReplay(replay, mode) {
