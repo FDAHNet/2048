@@ -1055,7 +1055,7 @@ button:hover {
 .board-shell {
   position: relative;
   width: calc(var(--board-size) + (var(--coord-band) * 2));
-  height: calc(var(--board-size) + (var(--coord-band) * 2));
+  height: calc(var(--board-size) + var(--coord-band));
 }
 
 .board-shell .board-frame {
@@ -1081,10 +1081,6 @@ button:hover {
 
 .board-coords-top {
   top: 0;
-}
-
-.board-coords-bottom {
-  bottom: 0;
 }
 
 .board-coords-col {

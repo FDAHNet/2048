@@ -104,7 +104,6 @@ const saveSlotsListElement = document.getElementById("save-slots-list");
 const replayIndicatorElement = document.getElementById("replay-indicator");
 const boardSizeSelect = document.getElementById("board-size");
 const boardCoordsTopElement = document.getElementById("board-coords-top");
-const boardCoordsBottomElement = document.getElementById("board-coords-bottom");
 const boardCoordsLeftElement = document.getElementById("board-coords-left");
 const boardCoordsRightElement = document.getElementById("board-coords-right");
 const advancedModeToggle = document.getElementById("advanced-mode-toggle");
@@ -3116,8 +3115,8 @@ function isRecordScore(score) {
 
 function renderBoardCoordinates() {
   const letters = Array.from({ length: boardSize }, (_, index) => String.fromCharCode(65 + index));
-  const numbers = Array.from({ length: boardSize }, (_, index) => String(boardSize - index));
-  const horizontalTargets = [boardCoordsTopElement, boardCoordsBottomElement];
+  const numbers = Array.from({ length: boardSize }, (_, index) => String(index + 1));
+  const horizontalTargets = [boardCoordsTopElement];
   const verticalTargets = [boardCoordsLeftElement, boardCoordsRightElement];
 
   horizontalTargets.forEach((target) => {
