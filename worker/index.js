@@ -301,7 +301,7 @@ function getReplayChunkKey(replayId, chunkIndex) {
 function validateReplay(replay, mode) {
   if (!ALLOWED_REPLAY_VERSIONS.has(Number(replay.version || 1))) return 'Replay version is invalid';
   const boardSize = Number(replay.boardSize);
-  if (!Number.isInteger(boardSize) || boardSize < 4 || boardSize > 8) return 'Replay board size is invalid';
+  if (!Number.isInteger(boardSize) || boardSize < 4 || boardSize > 16) return 'Replay board size is invalid';
   if (`${boardSize}x${boardSize}` !== mode) return 'Replay mode mismatch';
   if (!Array.isArray(replay.start) || replay.start.length > boardSize * boardSize) return 'Replay start is invalid';
   if (!Array.isArray(replay.turns) || replay.turns.length > MAX_REPLAY_TURNS) return 'Replay turns are invalid';
@@ -1059,6 +1059,7 @@ function json(data, status, headers) {
     },
   });
 }
+
 
 
 
