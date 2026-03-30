@@ -1774,6 +1774,7 @@ button:hover {
   margin-bottom: 0;
   min-width: 126px;
   padding: 7px 8px;
+  transform: translateY(10px);
   background: linear-gradient(180deg, #f3f3f3 0%, #cfcfcf 100%);
   color: #121212;
   font-family: "Press Start 2P", "Arial Black", monospace;
@@ -1787,6 +1788,7 @@ button:hover {
 }
 
 .records-toggle-side-button:hover {
+  transform: translateY(10px);
   background: linear-gradient(180deg, #ffffff 0%, #dddddd 100%);
   color: #000;
 }
