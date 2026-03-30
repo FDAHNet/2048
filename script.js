@@ -4118,7 +4118,6 @@ function renderGlobalRecords(recordsByMode) {
     });
   });
   syncExpandedRecordsUI();
-  maybeCelebrateLiveGlobalRecord();
 }
 
 function syncExpandedRecordsUI() {
@@ -4144,7 +4143,7 @@ function setExpandedRecordsMode(mode) {
 
 function getTopScoreForMode(mode, category = getCurrentRecordCategory()) {
   const records = globalRecordsCache[mode]?.[normalizeRecordCategory(category)] || [];
-  return records.length ? Math.max(...records.map((record) => record.score)) : 0;
+  return records.length ? Number(records[0].score || 0) : 0;
 }
 
 function mergeGlobalRecordIntoCache(record) {
