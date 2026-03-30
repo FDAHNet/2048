@@ -29,6 +29,7 @@ const RECORD_CATEGORY_LABELS = {
   hole: "H.O.L.E.",
 };
 const DEFAULT_ADVANCED_CREDITS = 100;
+const HOLE_SPEED_OPTIONS = [1, 2, 4, 8, 16, 32];
 const ADVANCED_BET_STAKES = [0, 5, 10, 20, 50];
 const ADVANCED_BET_RULES = [
   { value: "reasonUser", label: "Finaliza BY USER" },
@@ -85,6 +86,8 @@ const creditsPlayerElement = document.getElementById("credits-player");
 const bestScoreElement = document.getElementById("best-score");
 const bestScoreCardElement = document.getElementById("best-score-card");
 const statusElement = document.getElementById("status");
+const holeSpeedControlElement = document.getElementById("hole-speed-control");
+const holeSpeedSelect = document.getElementById("hole-speed-select");
 const restartButton = document.getElementById("restart-button");
 const finishButton = document.getElementById("finish-button");
 const gameOverOverlayElement = document.getElementById("game-over-overlay");
@@ -226,6 +229,7 @@ let holeSequenceProgress = 0;
 let ctrlSequenceProgress = 0;
 let holePreferredCorner = null;
 let holeRunUsed = false;
+let holeSpeedMultiplier = 1;
 let attractDismissed = false;
 let theme = localStorage.getItem(THEME_KEY) || "crt";
 let gameSessionId = 0;
@@ -1640,9 +1644,10 @@ function stopHoleMode(options = {}) {
     window.clearTimeout(holeTimer);
     holeTimer = null;
   }
-  if (!keepStatus && statusElement.textContent === "MODO H.O.L.E. Pulsa Espacio para parar.") {
+  if (!keepStatus && statusElement.textContent.startsWith("MODO H.O.L.E.")) {
     setStatus("");
   }
+  updateHoleSpeedUI();
 }
 
 function endGameByMachine() {
@@ -2326,6 +2331,19 @@ function setAdminPanelStatus(message) {
   }
 }
 
+function updateHoleSpeedUI() {
+  if (holeSpeedSelect) {
+    holeSpeedSelect.value = String(holeSpeedMultiplier);
+  }
+  if (holeSpeedControlElement) {
+    holeSpeedControlElement.classList.toggle("hidden", !holeMode);
+  }
+}
+
+function getHoleStatusText() {
+  return `MODO H.O.L.E. ${holeSpeedMultiplier}x. Pulsa Espacio para parar.`;
+}
+
 async function handleAdvancedModeToggle() {
   advancedMode = Boolean(advancedModeToggle?.checked);
   if (!advancedMode && activeAdvancedRound?.wagers?.length && !activeAdvancedRound.settled) {
@@ -2920,6 +2938,7 @@ function scheduleHoleMove() {
   if (!holeMode) return;
   if (holeTimer) window.clearTimeout(holeTimer);
   const holeSessionId = gameSessionId;
+  const holeDelay = Math.max(8, Math.round(70 / holeSpeedMultiplier));
   holeTimer = window.setTimeout(() => {
     if (holeSessionId !== gameSessionId) return;
     if (!holeMode || isAnimating || replayMode || initialsEntryState.active || demoMode) return;
@@ -2937,7 +2956,7 @@ function scheduleHoleMove() {
       return;
     }
     move(direction);
-  }, 70);
+  }, holeDelay);
 }
 
 function startHoleMode() {
@@ -2951,7 +2970,8 @@ function startHoleMode() {
   if (currentReplay) currentReplay.category = "hole";
   holeSequenceProgress = 0;
   holePreferredCorner = determineHolePreferredCorner(boardValuesFromState());
-  setStatus("MODO H.O.L.E. Pulsa Espacio para parar.");
+  setStatus(getHoleStatusText());
+  updateHoleSpeedUI();
   scheduleHoleMove();
 }
 
@@ -4798,7 +4818,7 @@ function move(direction) {
         return;
       }
     } else {
-      setStatus(demoMode ? "MODO DEMO" : holeMode ? "MODO H.O.L.E. Pulsa Espacio para parar." : "");
+      setStatus(demoMode ? "MODO DEMO" : holeMode ? getHoleStatusText() : "");
     }
     isAnimating = false;
     if (demoMode) scheduleDemoMove();
@@ -5391,6 +5411,14 @@ advancedMiniExpandButton?.addEventListener("click", () => {
   advancedBetsVisible = true;
   updateAdvancedModeUI();
 });
+holeSpeedSelect?.addEventListener("change", (event) => {
+  const nextValue = Number(event.target.value);
+  holeSpeedMultiplier = HOLE_SPEED_OPTIONS.includes(nextValue) ? nextValue : 1;
+  if (holeMode) {
+    scheduleHoleMove();
+    setStatus(getHoleStatusText());
+  }
+});
 advancedLogoutButton?.addEventListener("click", logoutAdvancedPlayer);
 clearAdvancedBetsButton?.addEventListener("click", () => {
   advancedBetDraft = createDefaultAdvancedBetDraft();
@@ -5414,6 +5442,7 @@ applyTheme(theme);
 updateAudioToggleButton();
 renderAdminOverview();
 updateAdvancedModeUI();
+updateHoleSpeedUI();
 updateManualStartUI();
 updatePauseButton();
 setTickerMessage("Angeloso Arcade System listo para jugar.", "accent");

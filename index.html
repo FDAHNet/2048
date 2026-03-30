@@ -257,7 +257,20 @@
           <div id="replay-indicator" class="replay-indicator hidden">REPLAY</div>
         </aside>
       </div>
-      <div id="status" class="status" aria-live="polite"></div>
+      <div class="status-bar">
+        <div id="status" class="status" aria-live="polite"></div>
+        <label id="hole-speed-control" class="hole-speed-control hidden" for="hole-speed-select">
+          <span>Velocidad H.O.L.E.</span>
+          <select id="hole-speed-select">
+            <option value="1">1x</option>
+            <option value="2">2x</option>
+            <option value="4">4x</option>
+            <option value="8">8x</option>
+            <option value="16">16x</option>
+            <option value="32">32x</option>
+          </select>
+        </label>
+      </div>
       <section id="initials-entry" class="initials-entry hidden" aria-labelledby="initials-title">
         <div class="initials-card">
           <p class="initials-eyebrow">Nuevo record</p>
