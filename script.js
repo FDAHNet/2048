@@ -2301,12 +2301,6 @@ function triggerTimeMilestoneFx(minutes) {
     gameTimerElement.classList.add("timer-milestone");
   }
 
-  const marker = document.createElement("div");
-  marker.className = "time-milestone-banner";
-  marker.textContent = `${minutes} MIN`;
-  uiFxLayerElement.appendChild(marker);
-  marker.addEventListener("animationend", () => marker.remove(), { once: true });
-
   playTimeMilestoneSound();
   setStatus(`${minutes} minutos de partida.`);
   announceMatchCommentary("marathon", { minutes }, "accent");
