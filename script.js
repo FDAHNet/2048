@@ -103,6 +103,10 @@ const closeSaveSlotsButton = document.getElementById("close-save-slots-button");
 const saveSlotsListElement = document.getElementById("save-slots-list");
 const replayIndicatorElement = document.getElementById("replay-indicator");
 const boardSizeSelect = document.getElementById("board-size");
+const boardCoordsTopElement = document.getElementById("board-coords-top");
+const boardCoordsBottomElement = document.getElementById("board-coords-bottom");
+const boardCoordsLeftElement = document.getElementById("board-coords-left");
+const boardCoordsRightElement = document.getElementById("board-coords-right");
 const advancedModeToggle = document.getElementById("advanced-mode-toggle");
 const recordsPanelElement = document.getElementById("records-panel");
 const toggleRecordsButton = document.getElementById("toggle-records-button");
@@ -2001,6 +2005,7 @@ function cloneSpawnData(tile) {
 
 function buildGrid() {
   syncBoardMetrics();
+  renderBoardCoordinates();
   boardElement.innerHTML = "";
   tileMap.clear();
   for (let row = 0; row < boardSize; row += 1) {
@@ -3107,6 +3112,37 @@ function isRecordScore(score) {
   const categoryRecords = records.filter((record) => normalizeRecordCategory(record.category) === category);
   if (categoryRecords.length < MAX_RECORDS_PER_MODE) return true;
   return categoryRecords.some((record) => score > record.score);
+}
+
+function renderBoardCoordinates() {
+  const letters = Array.from({ length: boardSize }, (_, index) => String.fromCharCode(65 + index));
+  const numbers = Array.from({ length: boardSize }, (_, index) => String(boardSize - index));
+  const horizontalTargets = [boardCoordsTopElement, boardCoordsBottomElement];
+  const verticalTargets = [boardCoordsLeftElement, boardCoordsRightElement];
+
+  horizontalTargets.forEach((target) => {
+    if (!target) return;
+    target.innerHTML = "";
+    target.style.gridTemplateColumns = `repeat(${boardSize}, minmax(0, 1fr))`;
+    letters.forEach((letter) => {
+      const cell = document.createElement("span");
+      cell.className = "board-coord-label";
+      cell.textContent = letter;
+      target.appendChild(cell);
+    });
+  });
+
+  verticalTargets.forEach((target) => {
+    if (!target) return;
+    target.innerHTML = "";
+    target.style.gridTemplateRows = `repeat(${boardSize}, minmax(0, 1fr))`;
+    numbers.forEach((number) => {
+      const cell = document.createElement("span");
+      cell.className = "board-coord-label";
+      cell.textContent = number;
+      target.appendChild(cell);
+    });
+  });
 }
 
 function shouldOpenInitialsForScore(score) {

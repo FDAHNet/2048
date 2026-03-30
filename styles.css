@@ -14,6 +14,7 @@
   --tile-size: calc((var(--board-size) - (var(--gap) * 5)) / 4);
   --tile-radius: 22px;
   --board-padding: 12px;
+  --coord-band: 26px;
   --move-duration: 210ms;
   --move-ease: cubic-bezier(0.18, 0.85, 0.2, 1);
   --scanline-opacity: 0.1;
@@ -1049,6 +1050,67 @@ button:hover {
   height: var(--board-size);
   filter: drop-shadow(0 18px 28px rgba(0, 0, 0, 0.32));
   overflow: hidden;
+}
+
+.board-shell {
+  position: relative;
+  width: calc(var(--board-size) + (var(--coord-band) * 2));
+  height: calc(var(--board-size) + (var(--coord-band) * 2));
+}
+
+.board-shell .board-frame {
+  position: absolute;
+  left: var(--coord-band);
+  top: var(--coord-band);
+}
+
+.board-coords-row,
+.board-coords-col {
+  position: absolute;
+  display: grid;
+  pointer-events: none;
+  user-select: none;
+}
+
+.board-coords-row {
+  left: var(--coord-band);
+  width: var(--board-size);
+  height: var(--coord-band);
+  align-items: center;
+}
+
+.board-coords-top {
+  top: 0;
+}
+
+.board-coords-bottom {
+  bottom: 0;
+}
+
+.board-coords-col {
+  top: var(--coord-band);
+  width: var(--coord-band);
+  height: var(--board-size);
+  justify-items: center;
+}
+
+.board-coords-left {
+  left: 0;
+}
+
+.board-coords-right {
+  right: 0;
+}
+
+.board-coord-label {
+  display: grid;
+  place-items: center;
+  font-family: "Space Grotesk", "Segoe UI", sans-serif;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: color-mix(in srgb, var(--accent) 78%, white 22%);
+  letter-spacing: 0.06em;
+  text-shadow: 0 0 10px rgba(83, 239, 255, 0.16);
 }
 
 .board-stage {
