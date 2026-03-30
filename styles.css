@@ -1749,16 +1749,6 @@ button:hover {
 
 .records-toggle-side-button {
   margin-top: auto;
-  display: grid;
-  gap: 6px;
-  align-items: start;
-  justify-items: stretch;
-  text-align: left;
-  min-width: 0;
-}
-
-.records-toggle-label {
-  display: block;
 }
 
 .records-toggle-mini-strip {
@@ -1787,6 +1777,11 @@ button:hover {
   font-size: 0.62rem;
   line-height: 1.15;
   color: rgba(255, 255, 255, 0.78);
+}
+
+.best-score-mini-strip {
+  margin-top: 6px;
+  min-height: 1.2em;
 }
 
 #finish-button {

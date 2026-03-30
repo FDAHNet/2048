@@ -343,7 +343,6 @@ const boardCoordsRightElement = document.getElementById("board-coords-right");
 const advancedModeToggle = document.getElementById("advanced-mode-toggle");
 const recordsPanelElement = document.getElementById("records-panel");
 const toggleRecordsButton = document.getElementById("toggle-records-button");
-const toggleRecordsLabelElement = document.getElementById("toggle-records-label");
 const recordsMiniRankElement = document.getElementById("records-mini-rank");
 const recordsMiniTextElement = document.getElementById("records-mini-text");
 const globalRecordsGroupsElement = document.getElementById("global-records-groups");
@@ -2598,9 +2597,7 @@ function restoreSessionSnapshot() {
 function setRecordsPanelOpen(nextOpen) {
   recordsPanelOpen = nextOpen;
   recordsPanelElement.classList.toggle("records-panel-collapsed", !recordsPanelOpen);
-  if (toggleRecordsLabelElement) {
-    toggleRecordsLabelElement.textContent = recordsPanelOpen ? "Ocultar records" : "Mostrar records";
-  }
+  toggleRecordsButton.textContent = recordsPanelOpen ? "Ocultar records" : "Mostrar records";
   if (recordsPanelOpen) {
     renderGlobalRecordsLoading();
     fetchGlobalRecords();
