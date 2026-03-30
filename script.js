@@ -346,7 +346,10 @@ const gameOverOverlayElement = document.getElementById("game-over-overlay");
 const gameOverReasonElement = document.getElementById("game-over-reason");
 const audioToggleButton = document.getElementById("audio-toggle-button");
 const musicToggleButton = document.getElementById("music-toggle-button");
+const musicNextButton = document.getElementById("music-next-button");
 const musicVolumeSlider = document.getElementById("music-volume-slider");
+const musicTrackNameElement = document.getElementById("music-track-name");
+const musicTrackTimerElement = document.getElementById("music-track-timer");
 const undoToggleButton = document.getElementById("undo-toggle-button");
 const pauseButton = document.getElementById("pause-button");
 const saveGameButton = document.getElementById("save-game-button");
@@ -480,6 +483,9 @@ let musicVolume = Math.min(1, Math.max(0, Number(localStorage.getItem(MUSIC_VOLU
 let currentMusicTrackIndex = Math.max(0, Number(localStorage.getItem(MUSIC_TRACK_INDEX_KEY) || 0)) % 10;
 let musicPlaybackToken = 0;
 let musicLoopTimeout = null;
+let musicTrackStartedAt = 0;
+let musicTrackDurationMs = 0;
+let musicTimerInterval = null;
 let recordSaved = false;
 let pendingGlobalRecord = null;
 let advancedMode = false;
@@ -610,6 +616,39 @@ function updateMusicGain() {
   audioMusicGain.gain.setTargetAtTime(target, audioContext?.currentTime || 0, 0.08);
 }
 
+function formatMusicTimer(ms) {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
+
+function stopMusicTimer() {
+  if (musicTimerInterval) {
+    window.clearInterval(musicTimerInterval);
+    musicTimerInterval = null;
+  }
+}
+
+function renderMusicInfo() {
+  const track = MUSIC_TRACKS[currentMusicTrackIndex % MUSIC_TRACKS.length];
+  if (musicTrackNameElement) {
+    musicTrackNameElement.textContent = track?.name || "Sin pista";
+  }
+  if (musicTrackTimerElement) {
+    const elapsed = musicEnabled && musicTrackStartedAt ? Math.min(musicTrackDurationMs, Date.now() - musicTrackStartedAt) : 0;
+    musicTrackTimerElement.textContent = `${formatMusicTimer(elapsed)} / ${formatMusicTimer(musicTrackDurationMs)}`;
+  }
+}
+
+function startMusicTimer() {
+  stopMusicTimer();
+  renderMusicInfo();
+  musicTimerInterval = window.setInterval(() => {
+    renderMusicInfo();
+  }, 250);
+}
+
 function updateMusicControls() {
   if (musicToggleButton) {
     musicToggleButton.textContent = musicEnabled ? "♫ MUSICA ON" : "♫ MUSICA OFF";
@@ -620,6 +659,7 @@ function updateMusicControls() {
     musicVolumeSlider.value = String(Math.round(musicVolume * 100));
   }
   updateMusicGain();
+  renderMusicInfo();
 }
 
 function loadAdvancedPlayerAuth() {
@@ -5939,6 +5979,7 @@ function stopMusicPlayback() {
     window.clearTimeout(musicLoopTimeout);
     musicLoopTimeout = null;
   }
+  stopMusicTimer();
   updateMusicGain();
 }
 
@@ -5952,6 +5993,9 @@ function startMusicPlayback() {
     const token = musicPlaybackToken;
     const startAt = context.currentTime + 0.05;
     const duration = scheduleMusicTrack(context, track, startAt);
+    musicTrackStartedAt = Date.now();
+    musicTrackDurationMs = Math.round(duration * 1000);
+    startMusicTimer();
     const nextIndex = (currentMusicTrackIndex + 1) % MUSIC_TRACKS.length;
     musicLoopTimeout = window.setTimeout(() => {
       if (token !== musicPlaybackToken || !musicEnabled) return;
@@ -5960,6 +6004,16 @@ function startMusicPlayback() {
       startMusicPlayback();
     }, Math.max(1200, Math.round(duration * 1000)));
   }).catch(() => {});
+}
+
+function nextMusicTrack() {
+  currentMusicTrackIndex = (currentMusicTrackIndex + 1) % MUSIC_TRACKS.length;
+  localStorage.setItem(MUSIC_TRACK_INDEX_KEY, String(currentMusicTrackIndex));
+  renderMusicInfo();
+  if (musicEnabled) {
+    startMusicPlayback();
+    setStatus(`Siguiente pista: ${MUSIC_TRACKS[currentMusicTrackIndex].name}.`);
+  }
 }
 
 function queueMove(direction) {
@@ -5997,6 +6051,7 @@ function toggleMusicEnabled() {
     setStatus(`Musica activada. Sonando: ${MUSIC_TRACKS[currentMusicTrackIndex % MUSIC_TRACKS.length].name}.`);
   } else {
     stopMusicPlayback();
+    musicTrackStartedAt = 0;
     if (audioContext?.state === "running" && !audioEnabled) {
       audioContext.suspend().catch(() => {});
     }
@@ -6257,6 +6312,7 @@ boardSizeSelect.addEventListener("change", () => {
 finishButton.addEventListener("click", finishGame);
 audioToggleButton.addEventListener("click", toggleAudioEnabled);
 musicToggleButton?.addEventListener("click", toggleMusicEnabled);
+musicNextButton?.addEventListener("click", nextMusicTrack);
 musicVolumeSlider?.addEventListener("input", (event) => {
   setMusicVolumeFromSlider(event.target.value);
 });

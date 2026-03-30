@@ -230,7 +230,13 @@
           </div>
           <button id="audio-toggle-button" type="button" class="secondary-button audio-toggle-button" aria-pressed="false">🔈 OFF</button>
           <div class="music-control-block">
+            <div class="music-control-header">
+              <span class="music-control-title">Musica</span>
+              <span id="music-track-timer" class="music-track-timer">00:00 / 00:00</span>
+            </div>
             <button id="music-toggle-button" type="button" class="secondary-button music-toggle-button" aria-pressed="false">♫ MUSICA OFF</button>
+            <div id="music-track-name" class="music-track-name">Sin pista</div>
+            <button id="music-next-button" type="button" class="secondary-button music-next-button">Siguiente pista</button>
             <label class="music-volume-control" for="music-volume-slider">
               <span>Volumen</span>
               <input id="music-volume-slider" type="range" min="0" max="100" step="1" value="28">
