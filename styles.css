@@ -1760,8 +1760,6 @@ button:hover {
 
 #finish-button,
 .audio-toggle-button,
-.music-control-block,
-.music-toggle-button,
 .undo-toggle-button,
 .pause-button,
 .save-game-button,
@@ -1972,6 +1970,7 @@ button:hover {
   gap: 5px;
   justify-items: stretch;
   width: 142px;
+  min-width: 0;
   box-sizing: border-box;
   padding: 8px 8px 10px;
   border-radius: 16px;
@@ -1982,9 +1981,10 @@ button:hover {
 
 .music-control-header {
   width: 100%;
-  display: grid;
-  gap: 2px;
-  justify-items: end;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
 }
 
 .music-control-title {
@@ -1992,16 +1992,20 @@ button:hover {
   font-size: 0.5rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .music-track-timer {
+  flex: 0 0 auto;
   color: rgba(255, 255, 255, 0.7);
   font-size: 0.46rem;
   letter-spacing: 0.02em;
+  white-space: nowrap;
 }
 
 .music-toggle-button {
   width: 100%;
+  min-width: 0;
   box-sizing: border-box;
   padding: 7px 8px;
   font-size: 0.68rem;
@@ -2021,6 +2025,7 @@ button:hover {
 
 .music-next-button {
   width: 100%;
+  min-width: 0;
   box-sizing: border-box;
   padding: 6px 8px;
   font-size: 0.58rem;
