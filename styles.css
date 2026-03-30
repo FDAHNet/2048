@@ -2893,9 +2893,9 @@ button:hover {
   border: 1px solid rgba(255,255,255,0.08);
 }
 
-.replay-vcr-inline {
+.replay-vcr-head {
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: auto 1fr;
   align-items: center;
   gap: 6px;
   min-width: 0;
@@ -2931,9 +2931,10 @@ button:hover {
 .replay-progress {
   text-align: right;
   color: var(--muted);
-  font-size: 0.58rem;
-  min-width: 88px;
-  white-space: nowrap;
+  font-size: 0.62rem;
+  min-width: 0;
+  white-space: normal;
+  line-height: 1.2;
 }
 
 .admin-panel {
