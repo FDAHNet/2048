@@ -4174,11 +4174,11 @@ function playRecordsMiniTickerAnimation() {
   const pixelsPerSecond = 54;
   const duration = Math.max(3200, Math.round((travel / pixelsPerSecond) * 1000));
 
-  recordsMiniTrackElement.style.transform = `translateX(${-trackWidth}px)`;
+  recordsMiniTrackElement.style.transform = `translateX(${windowWidth}px)`;
   recordsMiniTickerAnimation = recordsMiniTrackElement.animate(
     [
-      { transform: `translateX(${-trackWidth}px)` },
       { transform: `translateX(${windowWidth}px)` },
+      { transform: `translateX(${-trackWidth}px)` },
     ],
     {
       duration,
