@@ -579,6 +579,7 @@ let recordsMiniTickerEntries = [];
 let recordsMiniTickerIndex = 0;
 let recordsMiniTickerAnimation = null;
 let recordCardModalOpen = false;
+let expandedRecordsSort = "score";
 let undoPanelOpen = false;
 let replayMode = false;
 let replayTimer = null;
@@ -4514,7 +4515,15 @@ function renderGlobalRecords(recordsByMode) {
     }
 
     RECORD_CATEGORIES.forEach((category) => {
-      const allRecords = (categoryRecords[category] || []).slice(0, MAX_RECORDS_PER_MODE);
+      const allRecords = (categoryRecords[category] || [])
+        .slice(0, MAX_RECORDS_PER_MODE)
+        .sort((left, right) => {
+          if (expandedRecordsMode === mode && expandedRecordsSort === "date") {
+            return String(right.isoDate || "").localeCompare(String(left.isoDate || ""));
+          }
+          if (right.score !== left.score) return right.score - left.score;
+          return String(left.isoDate || "").localeCompare(String(right.isoDate || ""));
+        });
       const records = expandedRecordsMode === mode ? allRecords : allRecords.slice(0, 4);
 
       const categoryBlock = document.createElement("div");
@@ -4678,6 +4687,12 @@ function syncExpandedRecordsUI() {
   });
   document.querySelectorAll(".records-mode-close").forEach((button) => {
     button.classList.toggle("hidden", expandedRecordsMode !== button.dataset.mode);
+  });
+  document.querySelectorAll(".records-sort-control").forEach((control) => {
+    control.classList.toggle("hidden", expandedRecordsMode !== control.dataset.mode);
+  });
+  document.querySelectorAll(".records-sort-select").forEach((select) => {
+    select.value = expandedRecordsSort;
   });
 }
 
@@ -6709,6 +6724,12 @@ document.querySelectorAll(".records-mode-toggle").forEach((button) => {
 });
 document.querySelectorAll(".records-mode-close").forEach((button) => {
   button.addEventListener("click", () => setExpandedRecordsMode(null));
+});
+document.querySelectorAll(".records-sort-select").forEach((select) => {
+  select.addEventListener("change", () => {
+    expandedRecordsSort = select.value === "date" ? "date" : "score";
+    renderGlobalRecords(globalRecordsCache);
+  });
 });
 window.addEventListener("keydown", handleKeydown);
 boardElement.addEventListener("touchstart", handleTouchStart, { passive: true });

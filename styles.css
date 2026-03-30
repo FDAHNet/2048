@@ -2738,6 +2738,36 @@ button:hover {
 
 .records-mode-actions {
   justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.records-sort-control {
+  display: inline-grid;
+  gap: 4px;
+  justify-items: start;
+  color: rgba(255, 255, 255, 0.76);
+  font-size: 0.56rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.records-sort-control span {
+  line-height: 1;
+}
+
+.records-sort-select {
+  min-width: 88px;
+  padding: 6px 8px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(19, 14, 29, 0.92);
+  color: #f4f2ff;
+  font-size: 0.68rem;
+}
+
+.records-sort-select option {
+  background: #170f23;
+  color: #f4f2ff;
 }
 
 .records-mode-toggle,
