@@ -5418,6 +5418,11 @@ async function startFreshGame() {
   const preparedRound = await prepareAdvancedRoundForNewGame();
   if (preparedRound === false) return;
   startGame({ advancedRound: preparedRound || null });
+  if (musicEnabled) {
+    currentMusicTrackIndex = 0;
+    localStorage.setItem(MUSIC_TRACK_INDEX_KEY, String(currentMusicTrackIndex));
+    startMusicPlayback({ restart: true });
+  }
   if (preparedRound?.totalStake) {
     setStatus(`Apuestas activadas por ${preparedRound.totalStake} creditos.`);
   }
