@@ -4132,11 +4132,38 @@ function renderRecordCardModal() {
   }
 }
 
+function positionRecordCardModal() {
+  if (!recordCardModalElement || !bestScoreCardElement) return;
+  const sheet = recordCardModalElement.querySelector(".record-card-modal-sheet");
+  if (!sheet) return;
+
+  const cardRect = bestScoreCardElement.getBoundingClientRect();
+  const viewportWidth = window.innerWidth;
+  const viewportHeight = window.innerHeight;
+  const gap = 12;
+  const preferredWidth = Math.min(520, viewportWidth - 24);
+  const sheetWidth = Math.max(320, preferredWidth);
+  const availableRight = viewportWidth - cardRect.right;
+  const canOpenRight = availableRight >= sheetWidth + gap;
+
+  let left = canOpenRight
+    ? Math.min(viewportWidth - sheetWidth - 12, cardRect.right + gap)
+    : Math.max(12, cardRect.right - sheetWidth);
+  let top = Math.max(12, cardRect.bottom + 10);
+  const maxTop = Math.max(12, viewportHeight - Math.min(720, viewportHeight - 24) - 12);
+  top = Math.min(top, maxTop);
+
+  sheet.style.width = `${sheetWidth}px`;
+  sheet.style.left = `${Math.round(left)}px`;
+  sheet.style.top = `${Math.round(top)}px`;
+}
+
 function setRecordCardModalOpen(nextOpen) {
   recordCardModalOpen = Boolean(nextOpen);
   recordCardModalElement?.classList.toggle("hidden", !recordCardModalOpen);
   if (recordCardModalOpen) {
     renderRecordCardModal();
+    positionRecordCardModal();
   }
 }
 
@@ -6105,6 +6132,23 @@ recordCardModalElement?.addEventListener("click", (event) => {
   if (event.target === recordCardModalElement) {
     setRecordCardModalOpen(false);
   }
+});
+window.addEventListener("resize", () => {
+  if (recordCardModalOpen) {
+    positionRecordCardModal();
+  }
+});
+window.addEventListener("scroll", () => {
+  if (recordCardModalOpen) {
+    positionRecordCardModal();
+  }
+}, { passive: true });
+window.addEventListener("pointerdown", (event) => {
+  if (!recordCardModalOpen) return;
+  const target = event.target;
+  const sheet = recordCardModalElement?.querySelector(".record-card-modal-sheet");
+  if (sheet?.contains(target) || bestScoreCardElement?.contains(target)) return;
+  setRecordCardModalOpen(false);
 });
 advancedModeToggle?.addEventListener("change", () => {
   void handleAdvancedModeToggle();
