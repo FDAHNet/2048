@@ -344,6 +344,8 @@ const advancedModeToggle = document.getElementById("advanced-mode-toggle");
 const recordsPanelElement = document.getElementById("records-panel");
 const toggleRecordsButton = document.getElementById("toggle-records-button");
 const recordsMiniRankElement = document.getElementById("records-mini-rank");
+const recordsMiniWindowElement = document.getElementById("records-mini-window");
+const recordsMiniTrackElement = document.getElementById("records-mini-track");
 const recordsMiniTextElement = document.getElementById("records-mini-text");
 const globalRecordsGroupsElement = document.getElementById("global-records-groups");
 const journalListElement = document.getElementById("journal-list");
@@ -458,6 +460,7 @@ let recordsPanelOpen = false;
 let recordsMiniTickerTimer = null;
 let recordsMiniTickerEntries = [];
 let recordsMiniTickerIndex = 0;
+let recordsMiniTickerAnimation = null;
 let undoPanelOpen = false;
 let replayMode = false;
 let replayTimer = null;
@@ -4151,16 +4154,53 @@ function buildRecordsMiniTickerEntries(recordsByMode) {
   return flat.slice(0, 10);
 }
 
+function clearRecordsMiniTickerAnimation() {
+  if (recordsMiniTickerAnimation) {
+    recordsMiniTickerAnimation.cancel();
+    recordsMiniTickerAnimation = null;
+  }
+  if (recordsMiniTrackElement) {
+    recordsMiniTrackElement.style.transform = "translateX(0)";
+  }
+}
+
+function playRecordsMiniTickerAnimation() {
+  clearRecordsMiniTickerAnimation();
+  if (!recordsMiniWindowElement || !recordsMiniTrackElement || !recordsMiniTextElement) return 4200;
+
+  const windowWidth = Math.max(1, Math.round(recordsMiniWindowElement.clientWidth || 0));
+  const trackWidth = Math.max(1, Math.round(recordsMiniTrackElement.scrollWidth || recordsMiniTextElement.scrollWidth || 0));
+  const travel = windowWidth + trackWidth;
+  const pixelsPerSecond = 54;
+  const duration = Math.max(3200, Math.round((travel / pixelsPerSecond) * 1000));
+
+  recordsMiniTrackElement.style.transform = `translateX(${-trackWidth}px)`;
+  recordsMiniTickerAnimation = recordsMiniTrackElement.animate(
+    [
+      { transform: `translateX(${-trackWidth}px)` },
+      { transform: `translateX(${windowWidth}px)` },
+    ],
+    {
+      duration,
+      easing: "linear",
+      fill: "forwards",
+    }
+  );
+  return duration;
+}
+
 function renderRecordsMiniTickerEntry() {
-  if (!recordsMiniRankElement || !recordsMiniTextElement) return;
+  if (!recordsMiniRankElement || !recordsMiniTextElement) return 4200;
   if (!recordsMiniTickerEntries.length) {
     recordsMiniRankElement.textContent = "#1";
     recordsMiniTextElement.textContent = "Esperando records...";
-    return;
+    clearRecordsMiniTickerAnimation();
+    return 4200;
   }
   const entry = recordsMiniTickerEntries[recordsMiniTickerIndex] || recordsMiniTickerEntries[0];
   recordsMiniRankElement.textContent = `#${recordsMiniTickerIndex + 1}`;
   recordsMiniTextElement.textContent = `${entry.initials} ${formatAdminNumber(entry.score)} · ${entry.mode} · ${getRecordCategoryLabel(entry.category)}`;
+  return playRecordsMiniTickerAnimation();
 }
 
 function scheduleNextRecordsMiniTickerStep() {
@@ -4168,10 +4208,10 @@ function scheduleNextRecordsMiniTickerStep() {
   if (!recordsMiniTickerEntries.length) return;
   const nextIndex = (recordsMiniTickerIndex + 1) % recordsMiniTickerEntries.length;
   const completedLoop = nextIndex === 0;
-  const delay = completedLoop ? 60000 : 4200;
+  const entryDuration = renderRecordsMiniTickerEntry();
+  const delay = completedLoop ? Math.max(60000, entryDuration + 800) : entryDuration + 800;
   recordsMiniTickerTimer = window.setTimeout(() => {
     recordsMiniTickerIndex = nextIndex;
-    renderRecordsMiniTickerEntry();
     scheduleNextRecordsMiniTickerStep();
   }, delay);
 }
@@ -4179,7 +4219,6 @@ function scheduleNextRecordsMiniTickerStep() {
 function updateRecordsMiniTicker(recordsByMode = globalRecordsCache) {
   recordsMiniTickerEntries = buildRecordsMiniTickerEntries(recordsByMode);
   recordsMiniTickerIndex = 0;
-  renderRecordsMiniTickerEntry();
   scheduleNextRecordsMiniTickerStep();
 }
 
