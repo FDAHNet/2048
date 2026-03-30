@@ -234,6 +234,8 @@ let replayArrowRotation = 0;
 let statsPanelOpen = false;
 let creditsDisplayValue = Number(advancedCredits || 0);
 let creditsAnimationFrame = null;
+let currentTickerMessage = "";
+let currentTickerTone = "normal";
 let adminPanelOpen = false;
 let adminPanelLoading = false;
 let adminOverview = null;
@@ -2294,6 +2296,7 @@ function setRecordsPanelOpen(nextOpen) {
 function setStatus(message) {
   statusElement.textContent = message;
   const normalized = String(message || "").trim();
+  if (!normalized) return;
   const tone = /error|no pude|fall/i.test(normalized)
     ? "danger"
     : /record|h\.o\.l\.e|demo|pausa|replay/i.test(normalized)
@@ -3176,6 +3179,9 @@ function formatBoardCoordinate(row, col) {
 function setTickerMessage(message, tone = "normal") {
   if (!systemTickerTextElement || !systemTickerTrackElement) return;
   const text = String(message || "").trim() || "Angeloso Arcade System listo para jugar.";
+  if (text === currentTickerMessage && tone === currentTickerTone) return;
+  currentTickerMessage = text;
+  currentTickerTone = tone;
   systemTickerTextElement.textContent = text;
   systemTickerTrackElement.dataset.tone = tone;
   systemTickerTrackElement.style.animation = "none";
