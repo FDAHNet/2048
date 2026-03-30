@@ -203,12 +203,16 @@ body::after {
 .controls,
 .board-panel {
   position: relative;
-  overflow: hidden;
   backdrop-filter: blur(18px);
   background: var(--panel);
   border: 1px solid var(--panel-border);
   border-radius: 28px;
   box-shadow: 0 18px 45px rgba(0, 0, 0, 0.28);
+}
+
+.hero,
+.controls {
+  overflow: visible;
 }
 
 .system-announcement-layer {
@@ -320,6 +324,9 @@ h1 {
   gap: 12px;
   flex-wrap: nowrap;
   justify-content: flex-end;
+  position: relative;
+  overflow: visible;
+  z-index: 4;
 }
 
 .score-card,
