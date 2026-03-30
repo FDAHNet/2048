@@ -345,6 +345,8 @@ const boardCoordsTopElement = document.getElementById("board-coords-top");
 const boardCoordsLeftElement = document.getElementById("board-coords-left");
 const boardCoordsRightElement = document.getElementById("board-coords-right");
 const advancedModeToggle = document.getElementById("advanced-mode-toggle");
+const advancedToggleLabelElement = document.querySelector(".advanced-toggle");
+const advancedToggleHintElement = document.querySelector(".advanced-toggle-hint");
 const recordsPanelElement = document.getElementById("records-panel");
 const toggleRecordsButton = document.getElementById("toggle-records-button");
 const recordsMiniRankElement = document.getElementById("records-mini-rank");
@@ -4164,6 +4166,28 @@ function setRecordCardModalOpen(nextOpen) {
   }
 }
 
+function positionAdvancedToggleHint() {
+  if (!advancedToggleLabelElement || !advancedToggleHintElement) return;
+  const rect = advancedToggleLabelElement.getBoundingClientRect();
+  const hintWidth = Math.min(320, Math.round(window.innerWidth * 0.72));
+  const left = Math.min(
+    window.innerWidth - hintWidth - 12,
+    Math.max(12, rect.left + (rect.width / 2) - (hintWidth / 2))
+  );
+  const top = rect.bottom + 12;
+  advancedToggleHintElement.style.left = `${Math.round(left)}px`;
+  advancedToggleHintElement.style.top = `${Math.round(top)}px`;
+  advancedToggleHintElement.style.width = `${hintWidth}px`;
+}
+
+function setAdvancedToggleHintVisible(nextVisible) {
+  if (!advancedToggleHintElement) return;
+  advancedToggleHintElement.classList.toggle("is-visible", Boolean(nextVisible));
+  if (nextVisible) {
+    positionAdvancedToggleHint();
+  }
+}
+
 function renderGlobalRecords(recordsByMode) {
   globalRecordsCache = recordsByMode;
   globalRecordsLoaded = true;
@@ -6117,11 +6141,11 @@ replayLastButton.addEventListener("click", () => {
   setReplayToIndex(replaySession.replay.turns.length);
 });
 toggleRecordsButton.addEventListener("click", () => setRecordsPanelOpen(!recordsPanelOpen));
-bestScoreCardElement?.addEventListener("click", () => setRecordCardModalOpen(true));
+bestScoreCardElement?.addEventListener("click", () => setRecordCardModalOpen(!recordCardModalOpen));
 bestScoreCardElement?.addEventListener("keydown", (event) => {
   if (event.key === "Enter" || event.key === " ") {
     event.preventDefault();
-    setRecordCardModalOpen(true);
+    setRecordCardModalOpen(!recordCardModalOpen);
   }
 });
 closeRecordCardModalButton?.addEventListener("click", () => setRecordCardModalOpen(false));
@@ -6136,6 +6160,20 @@ window.addEventListener("pointerdown", (event) => {
   if (recordCardModalElement?.contains(target) || bestScoreCardElement?.contains(target)) return;
   setRecordCardModalOpen(false);
 });
+advancedToggleLabelElement?.addEventListener("mouseenter", () => setAdvancedToggleHintVisible(true));
+advancedToggleLabelElement?.addEventListener("mouseleave", () => setAdvancedToggleHintVisible(false));
+advancedToggleLabelElement?.addEventListener("focusin", () => setAdvancedToggleHintVisible(true));
+advancedToggleLabelElement?.addEventListener("focusout", () => setAdvancedToggleHintVisible(false));
+window.addEventListener("resize", () => {
+  if (advancedToggleHintElement?.classList.contains("is-visible")) {
+    positionAdvancedToggleHint();
+  }
+});
+window.addEventListener("scroll", () => {
+  if (advancedToggleHintElement?.classList.contains("is-visible")) {
+    positionAdvancedToggleHint();
+  }
+}, { passive: true });
 advancedModeToggle?.addEventListener("change", () => {
   void handleAdvancedModeToggle();
 });
