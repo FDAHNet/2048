@@ -4962,6 +4962,8 @@ async function submitGlobalRecord() {
 
 async function openReplayViewer(replay, record) {
   setStatsPanelOpen(false);
+  awaitingManualStart = false;
+  updateManualStartUI();
   replayViewerElement.classList.remove("hidden");
   replayMetaElement.textContent = `${record.initials} | ${record.mode} | ${record.score} puntos | ${record.displayDate}`;
   if (!replay && (record?.replayParts || record?.replayRef)) {
