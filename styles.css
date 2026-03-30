@@ -402,6 +402,7 @@ h1 {
 
 .best-score-card {
   cursor: pointer;
+  overflow: visible;
 }
 
 .best-score-card:focus-visible {
@@ -1810,7 +1811,9 @@ button:hover {
 }
 
 .record-card-modal {
-  position: fixed;
+  position: absolute;
+  top: 0;
+  left: calc(100% + 12px);
   z-index: 140;
   width: min(520px, calc(100vw - 32px));
   max-height: min(74vh, 720px);
