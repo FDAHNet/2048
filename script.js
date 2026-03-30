@@ -2331,6 +2331,16 @@ function setAdminPanelStatus(message) {
   }
 }
 
+function getCurrentMoveDuration() {
+  return holeMode ? Math.max(6, Math.round(MOVE_DURATION / holeSpeedMultiplier)) : MOVE_DURATION;
+}
+
+function syncMoveDurationUI() {
+  const boardFrame = getBoardFrameElement();
+  if (!boardFrame || replayMode) return;
+  boardFrame.style.setProperty("--move-duration", `${getCurrentMoveDuration()}ms`);
+}
+
 function updateHoleSpeedUI() {
   if (holeSpeedSelect) {
     holeSpeedSelect.value = String(holeSpeedMultiplier);
@@ -2338,6 +2348,7 @@ function updateHoleSpeedUI() {
   if (holeSpeedControlElement) {
     holeSpeedControlElement.classList.toggle("hidden", !holeMode);
   }
+  syncMoveDurationUI();
 }
 
 function getHoleStatusText() {
@@ -2938,7 +2949,7 @@ function scheduleHoleMove() {
   if (!holeMode) return;
   if (holeTimer) window.clearTimeout(holeTimer);
   const holeSessionId = gameSessionId;
-  const holeDelay = Math.max(8, Math.round(70 / holeSpeedMultiplier));
+  const holeDelay = Math.max(6, getCurrentMoveDuration());
   holeTimer = window.setTimeout(() => {
     if (holeSessionId !== gameSessionId) return;
     if (!holeMode || isAnimating || replayMode || initialsEntryState.active || demoMode) return;
@@ -4185,6 +4196,7 @@ function setReplayVisualState(active) {
   boardFrame.classList.toggle("is-replay", active);
   sideActions?.classList.toggle("is-replay-mode", active);
   replayIndicatorElement.classList.toggle("hidden", !active);
+  if (!active) syncMoveDurationUI();
 }
 
 function triggerReplayWipe() {
@@ -4835,7 +4847,7 @@ function move(direction) {
     isAnimating = false;
     if (demoMode) scheduleDemoMove();
     if (holeMode) scheduleHoleMove();
-  }, MOVE_DURATION);
+  }, getCurrentMoveDuration());
 }
 
 function normalizeCells() {
@@ -4911,7 +4923,7 @@ function createMergeGhost({ fromRow, fromCol, toRow, toCol, value }) {
     ghost.style.filter = "blur(1px)";
   });
 
-  window.setTimeout(() => ghost.remove(), MOVE_DURATION);
+  window.setTimeout(() => ghost.remove(), getCurrentMoveDuration());
 }
 
 function ensureAudio() {
@@ -5455,6 +5467,7 @@ updateAudioToggleButton();
 renderAdminOverview();
 updateAdvancedModeUI();
 updateHoleSpeedUI();
+syncMoveDurationUI();
 updateManualStartUI();
 updatePauseButton();
 setTickerMessage("Angeloso Arcade System listo para jugar.", "accent");
