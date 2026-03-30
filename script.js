@@ -366,6 +366,9 @@ const statsPanelContentElement = document.getElementById("stats-panel-content");
 if (recordCardModalElement && bestScoreCardElement && recordCardModalElement.parentElement !== bestScoreCardElement) {
   bestScoreCardElement.appendChild(recordCardModalElement);
 }
+if (advancedToggleHintElement && advancedToggleHintElement.parentElement !== document.body) {
+  document.body.appendChild(advancedToggleHintElement);
+}
 const closeStatsButton = document.getElementById("close-stats-button");
 const adminPanelElement = document.getElementById("admin-panel");
 const adminPinEntryElement = document.getElementById("admin-pin-entry");
