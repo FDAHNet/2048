@@ -1749,6 +1749,44 @@ button:hover {
 
 .records-toggle-side-button {
   margin-top: auto;
+  display: grid;
+  gap: 6px;
+  align-items: start;
+  justify-items: stretch;
+  text-align: left;
+  min-width: 0;
+}
+
+.records-toggle-label {
+  display: block;
+}
+
+.records-toggle-mini-strip {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding-top: 2px;
+  border-top: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.records-mini-rank {
+  font-family: "Press Start 2P", "Space Grotesk", sans-serif;
+  font-size: 0.56rem;
+  line-height: 1;
+  color: #fff4b1;
+  text-shadow: 0 0 10px rgba(255, 225, 120, 0.24);
+}
+
+.records-mini-text {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 0.62rem;
+  line-height: 1.15;
+  color: rgba(255, 255, 255, 0.78);
 }
 
 #finish-button {

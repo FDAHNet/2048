@@ -343,6 +343,9 @@ const boardCoordsRightElement = document.getElementById("board-coords-right");
 const advancedModeToggle = document.getElementById("advanced-mode-toggle");
 const recordsPanelElement = document.getElementById("records-panel");
 const toggleRecordsButton = document.getElementById("toggle-records-button");
+const toggleRecordsLabelElement = document.getElementById("toggle-records-label");
+const recordsMiniRankElement = document.getElementById("records-mini-rank");
+const recordsMiniTextElement = document.getElementById("records-mini-text");
 const globalRecordsGroupsElement = document.getElementById("global-records-groups");
 const journalListElement = document.getElementById("journal-list");
 const journalTitleElement = document.getElementById("journal-title");
@@ -453,6 +456,9 @@ let advancedBetsCollapsed = false;
 let journalEntries = [];
 let currentReplay = null;
 let recordsPanelOpen = false;
+let recordsMiniTickerTimer = null;
+let recordsMiniTickerEntries = [];
+let recordsMiniTickerIndex = 0;
 let undoPanelOpen = false;
 let replayMode = false;
 let replayTimer = null;
@@ -2592,7 +2598,9 @@ function restoreSessionSnapshot() {
 function setRecordsPanelOpen(nextOpen) {
   recordsPanelOpen = nextOpen;
   recordsPanelElement.classList.toggle("records-panel-collapsed", !recordsPanelOpen);
-  toggleRecordsButton.textContent = recordsPanelOpen ? "Ocultar records" : "Mostrar records";
+  if (toggleRecordsLabelElement) {
+    toggleRecordsLabelElement.textContent = recordsPanelOpen ? "Ocultar records" : "Mostrar records";
+  }
   if (recordsPanelOpen) {
     renderGlobalRecordsLoading();
     fetchGlobalRecords();
@@ -4118,6 +4126,64 @@ function renderGlobalRecords(recordsByMode) {
     });
   });
   syncExpandedRecordsUI();
+  updateRecordsMiniTicker(recordsByMode);
+}
+
+function clearRecordsMiniTickerTimer() {
+  if (recordsMiniTickerTimer) {
+    window.clearTimeout(recordsMiniTickerTimer);
+    recordsMiniTickerTimer = null;
+  }
+}
+
+function buildRecordsMiniTickerEntries(recordsByMode) {
+  const flat = [];
+  GLOBAL_MODES.forEach((mode) => {
+    RECORD_CATEGORIES.forEach((category) => {
+      (recordsByMode?.[mode]?.[category] || []).forEach((record) => {
+        flat.push({
+          mode,
+          category,
+          initials: record.initials,
+          score: Number(record.score || 0),
+        });
+      });
+    });
+  });
+  flat.sort((left, right) => right.score - left.score);
+  return flat.slice(0, 10);
+}
+
+function renderRecordsMiniTickerEntry() {
+  if (!recordsMiniRankElement || !recordsMiniTextElement) return;
+  if (!recordsMiniTickerEntries.length) {
+    recordsMiniRankElement.textContent = "#1";
+    recordsMiniTextElement.textContent = "Esperando records...";
+    return;
+  }
+  const entry = recordsMiniTickerEntries[recordsMiniTickerIndex] || recordsMiniTickerEntries[0];
+  recordsMiniRankElement.textContent = `#${recordsMiniTickerIndex + 1}`;
+  recordsMiniTextElement.textContent = `${entry.initials} ${formatAdminNumber(entry.score)} · ${entry.mode} · ${getRecordCategoryLabel(entry.category)}`;
+}
+
+function scheduleNextRecordsMiniTickerStep() {
+  clearRecordsMiniTickerTimer();
+  if (!recordsMiniTickerEntries.length) return;
+  const nextIndex = (recordsMiniTickerIndex + 1) % recordsMiniTickerEntries.length;
+  const completedLoop = nextIndex === 0;
+  const delay = completedLoop ? 60000 : 4200;
+  recordsMiniTickerTimer = window.setTimeout(() => {
+    recordsMiniTickerIndex = nextIndex;
+    renderRecordsMiniTickerEntry();
+    scheduleNextRecordsMiniTickerStep();
+  }, delay);
+}
+
+function updateRecordsMiniTicker(recordsByMode = globalRecordsCache) {
+  recordsMiniTickerEntries = buildRecordsMiniTickerEntries(recordsByMode);
+  recordsMiniTickerIndex = 0;
+  renderRecordsMiniTickerEntry();
+  scheduleNextRecordsMiniTickerStep();
 }
 
 function syncExpandedRecordsUI() {

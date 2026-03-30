@@ -224,7 +224,13 @@
           <button id="undo-toggle-button" type="button" class="undo-toggle-button">UNDO</button>
           <button id="pause-button" type="button" class="pause-button">PAUSA</button>
           <button id="save-game-button" type="button" class="save-game-button">Grabar Partida</button>
-          <button id="toggle-records-button" type="button" class="secondary-button records-toggle-side-button">Mostrar records</button>
+          <button id="toggle-records-button" type="button" class="secondary-button records-toggle-side-button">
+            <span id="toggle-records-label" class="records-toggle-label">Mostrar records</span>
+            <span class="records-toggle-mini-strip" aria-hidden="true">
+              <span id="records-mini-rank" class="records-mini-rank">#1</span>
+              <span id="records-mini-text" class="records-mini-text">Esperando records...</span>
+            </span>
+          </button>
           <section id="save-slots-panel" class="save-slots-panel hidden" aria-labelledby="save-slots-title">
             <div class="save-slots-card">
               <div class="save-slots-header">
