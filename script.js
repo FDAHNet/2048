@@ -635,6 +635,12 @@ let pausedElapsedMs = 0;
 let gameTimerScale = 1;
 let moveHistory = [];
 let moveSequence = 0;
+let currentFusionStreak = 0;
+let bestFusionStreak = 0;
+let decisiveMomentMs = 0;
+let decisiveMomentLabel = "";
+let momentumLabel = "Arrancando";
+let lastMomentumAnnouncement = "";
 let initialsTimerInterval = null;
 let saveSlotsPanelOpen = false;
 let advancedSessionReported = false;
@@ -2011,6 +2017,42 @@ function getMoveDirectionStats() {
   return counts;
 }
 
+function getEmptyCellCount(state = gameState) {
+  return state.cells.flat().filter((tile) => !tile).length;
+}
+
+function getMatchMomentLabel(state = gameState) {
+  const empties = getEmptyCellCount(state);
+  const highestTile = getHighestTileValue(state);
+  if (state.over) return lastGameOverReason === "BY USER" ? "Cierre voluntario" : "Final agonico";
+  if (empties <= 1) return "Final agonico";
+  if (empties <= 2) return "En apuros";
+  if (currentFusionStreak >= 4) return "Remontada";
+  if (highestTile >= 2048 || (highestTile >= 1024 && empties >= Math.max(4, boardSize - 1))) return "Dominando";
+  if (empties >= Math.max(8, boardSize + 1)) return "Tablero abierto";
+  if (moveSequence >= 20 && empties >= 4) return "Controlando";
+  return "Partido vivo";
+}
+
+function noteDecisiveMoment(label) {
+  decisiveMomentMs = getElapsedMs();
+  decisiveMomentLabel = label;
+}
+
+function updateMomentumFromBoard() {
+  const nextLabel = getMatchMomentLabel();
+  momentumLabel = nextLabel;
+  if (!demoMode && !holeMode && nextLabel !== lastMomentumAnnouncement) {
+    if (nextLabel === "En apuros" || nextLabel === "Final agonico") {
+      announceMatchCommentary("danger", { moves: moveSequence }, "accent");
+      lastMomentumAnnouncement = nextLabel;
+    } else if (nextLabel === "Remontada" || nextLabel === "Dominando") {
+      announceMatchCommentary(nextLabel === "Remontada" ? "comeback" : "build", { moves: moveSequence }, "accent");
+      lastMomentumAnnouncement = nextLabel;
+    }
+  }
+}
+
 function renderStatsPanel() {
   if (!statsPanelContentElement) return;
 
@@ -2023,6 +2065,9 @@ function renderStatsPanel() {
   const biggestAchievement = achievementCount ? Math.max(...journalEntries.map((entry) => entry.value)) : 0;
   const reasonLabel = lastGameOverReason || "BY MACHINE";
   const directionStats = getMoveDirectionStats();
+  const mvpLabel = highestTile ? `Ficha ${highestTile}` : "Sin MVP";
+  const keyMoment = decisiveMomentLabel || (highestTile >= 2048 ? "Se alcanzo 2048" : bestFusionStreak >= 4 ? "Remontada con racha" : "Partida estable");
+  const decisiveMinute = formatElapsedTime(decisiveMomentMs || getElapsedMs());
   const directionRows = Object.entries(directionStats)
     .map(([direction, count]) => `
       <div class="stats-list-row">
@@ -2066,6 +2111,14 @@ function renderStatsPanel() {
         <span class="stats-card-label">Puntos por jugada</span>
         <span class="stats-card-value">${averageScore}</span>
       </div>
+      <div class="stats-card">
+        <span class="stats-card-label">Momento</span>
+        <span class="stats-card-value">${momentumLabel}</span>
+      </div>
+      <div class="stats-card">
+        <span class="stats-card-label">Mejor racha</span>
+        <span class="stats-card-value">x${bestFusionStreak}</span>
+      </div>
     </div>
     <div class="stats-section">
       <h4>Resumen rapido</h4>
@@ -2081,6 +2134,18 @@ function renderStatsPanel() {
         <div class="stats-list-row">
           <span>Movimientos en replay</span>
           <span>${currentReplay?.turns?.length || 0}</span>
+        </div>
+        <div class="stats-list-row">
+          <span>MVP del partido</span>
+          <span>${mvpLabel}</span>
+        </div>
+        <div class="stats-list-row">
+          <span>Momento clave</span>
+          <span>${keyMoment}</span>
+        </div>
+        <div class="stats-list-row">
+          <span>Minuto decisivo</span>
+          <span>${decisiveMinute}</span>
         </div>
       </div>
     </div>
@@ -2716,6 +2781,12 @@ function startGame(options = {}) {
   advancedBetResultMessage = "";
   moveHistory = [];
   moveSequence = 0;
+  currentFusionStreak = 0;
+  bestFusionStreak = 0;
+  decisiveMomentMs = 0;
+  decisiveMomentLabel = "";
+  momentumLabel = "Arrancando";
+  lastMomentumAnnouncement = "";
   lastCommentaryScoreBucket = 0;
   commentaryLastIndexByCategory = {};
   globalRecordFanfarePlayed = false;
@@ -3544,6 +3615,7 @@ function maybeCelebrateLiveGlobalRecord() {
   const currentTopScore = getTopScoreForMode(mode, getCurrentRecordCategory());
   if (gameState.score > currentTopScore) {
     globalRecordFanfarePlayed = true;
+    noteDecisiveMoment(`Record global en ${mode}`);
     activateBestScoreCelebration();
     playGlobalRecordFanfare();
     setStatus("Nuevo record global en juego.");
@@ -5469,6 +5541,12 @@ function enterManualStartMode() {
   currentReplay = null;
   moveHistory = [];
   moveSequence = 0;
+  currentFusionStreak = 0;
+  bestFusionStreak = 0;
+  decisiveMomentMs = 0;
+  decisiveMomentLabel = "";
+  momentumLabel = "Arrancando";
+  lastMomentumAnnouncement = "";
   gameState = createEmptyState();
   buildGrid();
   render();
@@ -5764,14 +5842,29 @@ function move(direction) {
     const nextMoveNumber = moveSequence + 1;
     const crossedScoreBucket = scoreBucket > lastCommentaryScoreBucket;
     if (!demoMode && !holeMode) {
+      if (gained > 0) {
+        currentFusionStreak += 1;
+        bestFusionStreak = Math.max(bestFusionStreak, currentFusionStreak);
+        if (currentFusionStreak >= 3 && (currentFusionStreak === 3 || currentFusionStreak % 2 === 1)) {
+          noteDecisiveMoment(`Racha x${currentFusionStreak}`);
+          showSystemAnnouncement(`EN RACHA x${currentFusionStreak}`, "accent");
+          announceMatchCommentary("comeback", { moves: nextMoveNumber }, "accent");
+        }
+      } else {
+        currentFusionStreak = 0;
+      }
       if (crossedScoreBucket) {
         lastCommentaryScoreBucket = scoreBucket;
+        noteDecisiveMoment(`Subida a ${formatAdminNumber(gameState.score)} puntos`);
       }
       if (highestMerge >= 2048) {
+        noteDecisiveMoment(`Se logro ${highestMerge}`);
         announceMatchCommentary("tile2048", { value: highestMerge }, "record");
       } else if (highestMerge >= 1024) {
+        noteDecisiveMoment(`Se alcanzo ${highestMerge}`);
         announceMatchCommentary("tile1024", { value: highestMerge }, "accent");
       } else if (highestMerge >= 512) {
+        noteDecisiveMoment(`Se alcanzo ${highestMerge}`);
         announceMatchCommentary("tile512", { value: highestMerge }, "accent");
       } else if (highestMerge >= 256) {
         announceMatchCommentary("tile256", { value: highestMerge }, "normal");
@@ -5788,6 +5881,7 @@ function move(direction) {
       } else if (nextMoveNumber > 0 && nextMoveNumber % 11 === 0) {
         announceMatchCommentary("comeback", { moves: nextMoveNumber }, "accent");
       }
+      updateMomentumFromBoard();
     }
     pushHistoryEntry(direction);
     persistSessionSnapshot();
