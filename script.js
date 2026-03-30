@@ -523,6 +523,7 @@ let lastTimerMilestone = 0;
 let lastAutosaveMilestone = 0;
 let gamePaused = false;
 let pausedElapsedMs = 0;
+let gameTimerScale = 1;
 let moveHistory = [];
 let moveSequence = 0;
 let initialsTimerInterval = null;
@@ -1743,8 +1744,22 @@ function handleAdminPinSubmit() {
   setAdminPanelOpen(true);
 }
 
+function getCurrentGameTimeScale() {
+  return holeMode ? holeSpeedMultiplier : 1;
+}
+
+function syncGameTimerScale(nextScale = getCurrentGameTimeScale()) {
+  const now = Date.now();
+  if (!gamePaused && gameTimerStartedAt) {
+    pausedElapsedMs += Math.max(0, now - gameTimerStartedAt) * gameTimerScale;
+  }
+  gameTimerStartedAt = now;
+  gameTimerScale = nextScale;
+}
+
 function getElapsedMs() {
-  return gamePaused ? pausedElapsedMs : Date.now() - gameTimerStartedAt;
+  if (gamePaused) return pausedElapsedMs;
+  return pausedElapsedMs + (Math.max(0, Date.now() - gameTimerStartedAt) * gameTimerScale);
 }
 
 function renderGameTimer() {
@@ -1876,6 +1891,7 @@ function stopGameTimer() {
 function startGameTimer() {
   stopGameTimer();
   gameTimerStartedAt = Date.now();
+  gameTimerScale = getCurrentGameTimeScale();
   gamePaused = false;
   pausedElapsedMs = 0;
   lastTimerMilestone = 0;
@@ -1929,6 +1945,7 @@ function stopDemoMode() {
 
 function stopHoleMode(options = {}) {
   const { keepStatus = false } = options;
+  syncGameTimerScale(1);
   holeMode = false;
   holeSequenceProgress = 0;
   holePreferredCorner = null;
@@ -2093,6 +2110,7 @@ function setGamePaused(nextPaused, options = {}) {
   if (nextPaused) {
     pausedElapsedMs = getElapsedMs();
     gamePaused = true;
+    gameTimerStartedAt = Date.now();
     stopGameTimer();
     setPauseOverlay(true);
     setStatus(statusMessage);
@@ -2102,7 +2120,8 @@ function setGamePaused(nextPaused, options = {}) {
   }
 
   gamePaused = false;
-  gameTimerStartedAt = Date.now() - pausedElapsedMs;
+  gameTimerStartedAt = Date.now();
+  gameTimerScale = getCurrentGameTimeScale();
   setPauseOverlay(false);
   updatePauseButton();
   renderGameTimer();
@@ -3290,6 +3309,7 @@ function startHoleMode() {
   if (demoMode || replayMode || initialsEntryState.active || gameState.over) return;
   stopDemoMode();
   holeMode = true;
+  syncGameTimerScale(holeSpeedMultiplier);
   holeRunUsed = true;
   if (currentReplay) currentReplay.category = "hole";
   holeSequenceProgress = 0;
@@ -6164,6 +6184,7 @@ holeSpeedSelect?.addEventListener("change", (event) => {
   const nextValue = Number(event.target.value);
   holeSpeedMultiplier = HOLE_SPEED_OPTIONS.includes(nextValue) ? nextValue : 1;
   if (holeMode) {
+    syncGameTimerScale(holeSpeedMultiplier);
     scheduleHoleMove();
     setStatus(getHoleStatusText());
   }
