@@ -2141,7 +2141,9 @@ button:hover {
 .side-actions.is-replay-mode .undo-panel,
 .side-actions.is-replay-mode .pause-button,
 .side-actions.is-replay-mode .save-game-button,
-.side-actions.is-replay-mode .save-slots-panel {
+.side-actions.is-replay-mode .save-slots-panel,
+.side-actions.is-replay-mode #finish-button,
+.side-actions.is-replay-mode .records-toggle-side-button {
   display: none;
 }
 
