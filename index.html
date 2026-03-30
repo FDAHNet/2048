@@ -138,6 +138,25 @@
       </div>
     </section>
 
+    <section id="admin-pin-entry" class="advanced-auth-entry hidden" aria-labelledby="admin-pin-title">
+      <div class="advanced-auth-card">
+        <button id="admin-pin-x" type="button" class="stats-close-button advanced-auth-x" aria-label="Cerrar acceso al panel de control">X</button>
+        <p class="initials-eyebrow">Control</p>
+        <h3 id="admin-pin-title">PIN del Panel</h3>
+        <div class="advanced-auth-fields">
+          <label class="advanced-auth-field">
+            <span>PIN numerico</span>
+            <input id="admin-pin-input" type="password" inputmode="numeric" maxlength="6" autocomplete="off" placeholder="******">
+          </label>
+        </div>
+        <div class="advanced-auth-actions">
+          <button id="admin-pin-submit" type="button">Entrar</button>
+          <button id="admin-pin-close" type="button" class="danger-button">Cerrar</button>
+        </div>
+        <p id="admin-pin-help" class="advanced-auth-help">Introduce el PIN para acceder al panel de control.</p>
+      </div>
+    </section>
+
     <section class="board-panel">
       <div id="starfield" class="starfield" aria-hidden="true"></div>
       <div class="board-layout">

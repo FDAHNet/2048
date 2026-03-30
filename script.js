@@ -20,6 +20,7 @@ const GLOBAL_RECORD_LABEL = "record";
 const WORKER_API_URL = "https://angeloso-2048-records.mcdrer.workers.dev";
 const HOLE_SEQUENCE = ["h", "o", "l", "e"];
 const CTRL_SEQUENCE = ["c", "t", "r", "l"];
+const ADMIN_PANEL_PIN = "771010";
 const HOLE_DIRECTIONS = ["up", "left", "right", "down"];
 const AUTOSAVE_INTERVAL_MS = 30 * 60 * 1000;
 const INITIALS_TIMEOUT_MS = 60 * 1000;
@@ -123,6 +124,12 @@ const statsPanelElement = document.getElementById("stats-panel");
 const statsPanelContentElement = document.getElementById("stats-panel-content");
 const closeStatsButton = document.getElementById("close-stats-button");
 const adminPanelElement = document.getElementById("admin-panel");
+const adminPinEntryElement = document.getElementById("admin-pin-entry");
+const adminPinInput = document.getElementById("admin-pin-input");
+const adminPinSubmitButton = document.getElementById("admin-pin-submit");
+const adminPinCloseButton = document.getElementById("admin-pin-close");
+const adminPinXButton = document.getElementById("admin-pin-x");
+const adminPinHelpElement = document.getElementById("admin-pin-help");
 const adminSummaryGridElement = document.getElementById("admin-summary-grid");
 const adminRecordsBodyElement = document.getElementById("admin-records-body");
 const adminUsersBodyElement = document.getElementById("admin-users-body");
@@ -241,6 +248,7 @@ let creditsAnimationFrame = null;
 let currentTickerMessage = "";
 let currentTickerTone = "normal";
 let adminPanelOpen = false;
+let adminPinGateOpen = false;
 let adminPanelLoading = false;
 let adminOverview = null;
 let adminBetDefinitionsDraft = [];
@@ -1449,6 +1457,40 @@ function setAdminPanelOpen(nextOpen) {
     renderAdminOverview();
     void loadAdminOverview();
   }
+}
+
+function openAdminPinGate() {
+  adminPinGateOpen = true;
+  adminPinEntryElement?.classList.remove("hidden");
+  if (adminPinInput) {
+    adminPinInput.value = "";
+    window.setTimeout(() => adminPinInput.focus(), 30);
+  }
+  if (adminPinHelpElement) {
+    adminPinHelpElement.textContent = "Introduce el PIN para acceder al panel de control.";
+  }
+}
+
+function closeAdminPinGate() {
+  adminPinGateOpen = false;
+  adminPinEntryElement?.classList.add("hidden");
+  if (adminPinInput) adminPinInput.value = "";
+}
+
+function handleAdminPinSubmit() {
+  const enteredPin = String(adminPinInput?.value || "").trim();
+  if (enteredPin !== ADMIN_PANEL_PIN) {
+    if (adminPinHelpElement) {
+      adminPinHelpElement.textContent = "PIN incorrecto.";
+    }
+    if (adminPinInput) {
+      adminPinInput.value = "";
+      adminPinInput.focus();
+    }
+    return;
+  }
+  closeAdminPinGate();
+  setAdminPanelOpen(true);
 }
 
 function getElapsedMs() {
@@ -5121,6 +5163,19 @@ function handleKeydown(event) {
     }
     return;
   }
+  if (adminPinGateOpen) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeAdminPinGate();
+      return;
+    }
+    if (event.key === "Enter") {
+      event.preventDefault();
+      handleAdminPinSubmit();
+      return;
+    }
+    return;
+  }
   if (gamePaused) {
     if (event.key === "Escape") {
       event.preventDefault();
@@ -5233,7 +5288,7 @@ function handleKeydown(event) {
         if (ctrlSequenceProgress === CTRL_SEQUENCE.length) {
           event.preventDefault();
           ctrlSequenceProgress = 0;
-          setAdminPanelOpen(true);
+          openAdminPinGate();
         }
       } else if (pressed === CTRL_SEQUENCE[0]) {
         ctrlSequenceProgress = 1;
@@ -5338,6 +5393,15 @@ closeAdminButton?.addEventListener("click", () => {
   setAdminPanelOpen(false);
 });
 refreshAdminButton?.addEventListener("click", () => { void loadAdminOverview(true); });
+adminPinSubmitButton?.addEventListener("click", handleAdminPinSubmit);
+adminPinCloseButton?.addEventListener("click", closeAdminPinGate);
+adminPinXButton?.addEventListener("click", closeAdminPinGate);
+adminPinInput?.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") {
+    event.preventDefault();
+    handleAdminPinSubmit();
+  }
+});
 adminUserRefreshButton?.addEventListener("click", () => { if (adminSelectedUserAlias) void loadAdminUser(adminSelectedUserAlias, true); });
 adminUserCloseButton?.addEventListener("click", () => closeAdminUserPanel());
 adminUserAddCreditsButton?.addEventListener("click", () => { void adjustAdminUserCredits("add"); });
