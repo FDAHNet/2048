@@ -2603,6 +2603,7 @@ function setStatus(message) {
   statusElement.textContent = message;
   const normalized = String(message || "").trim();
   if (!normalized) return;
+  if (replayMode || /^replay\b/i.test(normalized)) return;
   if (/h\.o\.l\.e/i.test(normalized)) return;
   const tone = /error|no pude|fall/i.test(normalized)
     ? "danger"
