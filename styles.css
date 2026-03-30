@@ -1896,13 +1896,21 @@ button:hover {
 
 .record-card-row {
   display: grid;
-  grid-template-columns: 40px minmax(0, 1fr) auto auto;
+  grid-template-columns: 42px minmax(0, 1fr) 110px 122px;
   gap: 10px;
   align-items: center;
   padding: 10px 12px;
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.04);
   font-size: 0.82rem;
+}
+
+.record-card-row-head {
+  background: rgba(255, 255, 255, 0.02);
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .record-card-rank {
@@ -1914,11 +1922,13 @@ button:hover {
 .record-card-score {
   color: #ffd166;
   font-weight: 700;
+  text-align: right;
 }
 
 .record-card-date {
   color: rgba(255, 255, 255, 0.64);
   font-size: 0.74rem;
+  text-align: right;
 }
 
 .record-card-empty {

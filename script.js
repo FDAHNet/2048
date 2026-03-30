@@ -4119,6 +4119,16 @@ function buildRecordCardModalSection(title, records) {
   const list = document.createElement("div");
   list.className = "record-card-list";
 
+  const head = document.createElement("div");
+  head.className = "record-card-row record-card-row-head";
+  head.innerHTML = `
+    <span>#</span>
+    <span>Jugador</span>
+    <span>Puntos</span>
+    <span>Fecha</span>
+  `;
+  list.appendChild(head);
+
   records.slice(0, MAX_RECORDS_PER_MODE).forEach((record, index) => {
     const row = document.createElement("div");
     row.className = "record-card-row";
@@ -6148,8 +6158,13 @@ bestScoreCardElement?.addEventListener("keydown", (event) => {
     setRecordCardModalOpen(!recordCardModalOpen);
   }
 });
-closeRecordCardModalButton?.addEventListener("click", () => setRecordCardModalOpen(false));
+closeRecordCardModalButton?.addEventListener("click", (event) => {
+  event.preventDefault();
+  event.stopPropagation();
+  setRecordCardModalOpen(false);
+});
 recordCardModalElement?.addEventListener("click", (event) => {
+  event.stopPropagation();
   if (event.target === recordCardModalElement) {
     setRecordCardModalOpen(false);
   }
