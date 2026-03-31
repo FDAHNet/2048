@@ -19,6 +19,8 @@ const MAX_REPLAY_TURNS = 600_000;
 const DEFAULT_PLAYER_CREDITS = 100;
 const MAX_CREDITS = 1_000_000;
 const MAX_ADMIN_PAGES = 20;
+const ADMIN_TOKEN_TTL_MS = 8 * 60 * 60 * 1000;
+const DEFAULT_ADMIN_PANEL_PIN_HASH = 'b876239a7a07cb250d3047971464750ff74ee4ac4e9d3298c067290571af5858';
 const ALLOWED_BET_RULES = new Set(['reasonUser', 'highestTileGte', 'durationMinutesGte', 'scoreGte', 'movesGte', 'holeUsed']);
 const DEFAULT_ADVANCED_BET_DEFINITIONS = [
   {
@@ -114,6 +116,11 @@ export default {
       if (url.pathname === '/player/session') return await handlePlayerSession(payload, env, corsHeaders);
       if (url.pathname === '/player/ledger') return await handlePlayerLedger(payload, env, corsHeaders);
       if (url.pathname === '/bets/config') return await handleBetsConfig(env, corsHeaders);
+      if (url.pathname === '/admin/auth') return await handleAdminAuth(payload, env, corsHeaders);
+      if (url.pathname.startsWith('/admin/')) {
+        const adminAuthError = await requireAdminAuth(payload, env);
+        if (adminAuthError) return json({ error: adminAuthError }, 403, corsHeaders);
+      }
       if (url.pathname === '/admin/player') return await handleAdminPlayer(payload, env, corsHeaders);
       if (url.pathname === '/admin/player/credits') return await handleAdminPlayerCredits(payload, env, corsHeaders);
       if (url.pathname === '/admin/bets/save') return await handleAdminBetsSave(payload, env, corsHeaders);
@@ -191,6 +198,52 @@ function getCorsHeaders(origin, allowedOrigin) {
     'Access-Control-Allow-Headers': 'Content-Type',
     Vary: 'Origin',
   };
+}
+
+function getAdminPinHash(env) {
+  return String(env.ADMIN_PANEL_PIN_HASH || DEFAULT_ADMIN_PANEL_PIN_HASH).trim().toLowerCase();
+}
+
+async function sha256Hex(value) {
+  const hashBuffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(String(value || '')));
+  return Array.from(new Uint8Array(hashBuffer), (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+async function buildAdminToken(env) {
+  const secret = getAdminPinHash(env);
+  const expiresAt = Date.now() + ADMIN_TOKEN_TTL_MS;
+  const payload = String(expiresAt);
+  const signature = await sha256Hex(`${payload}.${secret}`);
+  return `${payload}.${signature}`;
+}
+
+async function requireAdminAuth(payload, env) {
+  const secret = getAdminPinHash(env);
+  if (!/^[a-f0-9]{64}$/i.test(secret)) return 'Admin auth is not configured';
+  const token = String(payload?.adminToken || '');
+  if (!token) return 'Admin auth required';
+  const [expiresAtRaw, signature] = token.split('.');
+  const expiresAt = Number(expiresAtRaw);
+  if (!expiresAtRaw || !signature || !Number.isFinite(expiresAt)) return 'Admin token is invalid';
+  if (Date.now() > expiresAt) return 'Admin session expired';
+  const expectedSignature = await sha256Hex(`${expiresAtRaw}.${secret}`);
+  if (signature !== expectedSignature) return 'Admin token is invalid';
+  return '';
+}
+
+async function handleAdminAuth(payload, env, corsHeaders) {
+  const pinHash = String(payload?.pinHash || '').trim().toLowerCase();
+  const expectedHash = getAdminPinHash(env);
+  if (!/^[a-f0-9]{64}$/i.test(expectedHash)) {
+    return json({ error: 'Admin auth is not configured' }, 503, corsHeaders);
+  }
+  if (!/^[a-f0-9]{64}$/i.test(pinHash)) {
+    return json({ error: 'PIN hash is invalid' }, 400, corsHeaders);
+  }
+  if (pinHash !== expectedHash) {
+    return json({ error: 'PIN incorrecto.' }, 403, corsHeaders);
+  }
+  return json({ ok: true, token: await buildAdminToken(env) }, 200, corsHeaders);
 }
 
 function validatePayload(payload) {

@@ -31,7 +31,7 @@ const GLOBAL_RECORD_LABEL = "record";
 const WORKER_API_URL = "https://angeloso-2048-records.mcdrer.workers.dev";
 const HOLE_SEQUENCE = ["h", "o", "l", "e"];
 const CTRL_SEQUENCE = ["c", "t", "r", "l"];
-const ADMIN_PANEL_PIN = "771010";
+const ADMIN_SESSION_TOKEN_KEY = "smooth-2048-admin-session-token";
 const HOLE_DIRECTIONS = ["up", "left", "right", "down"];
 const AUTOSAVE_INTERVAL_MS = 30 * 60 * 1000;
 const INITIALS_TIMEOUT_MS = 60 * 1000;
@@ -610,6 +610,7 @@ let lastCommentaryScoreBucket = 0;
 let adminPanelOpen = false;
 let adminPinGateOpen = false;
 let adminPanelLoading = false;
+let adminSessionToken = sessionStorage.getItem(ADMIN_SESSION_TOKEN_KEY) || "";
 let adminOverview = null;
 let adminBetDefinitionsDraft = [];
 let adminSectionOpen = {
@@ -1215,16 +1216,23 @@ async function sha256Hex(value) {
 }
 
 async function postWorkerJson(path, payload) {
+  const requestBody = path.startsWith("/admin/")
+    ? { ...(payload || {}), adminToken: adminSessionToken || "" }
+    : payload;
   const response = await fetch(`${WORKER_API_URL}${path}`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(payload),
+    body: JSON.stringify(requestBody),
   });
 
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
+    if (path.startsWith("/admin/") && response.status === 403) {
+      adminSessionToken = "";
+      sessionStorage.removeItem(ADMIN_SESSION_TOKEN_KEY);
+    }
     throw new Error(body.error || `Worker ${response.status}`);
   }
   return body;
@@ -2033,6 +2041,10 @@ function setAdminPanelOpen(nextOpen) {
 }
 
 function openAdminPinGate() {
+  if (adminSessionToken) {
+    setAdminPanelOpen(true);
+    return;
+  }
   adminPinGateOpen = true;
   adminPinEntryElement?.classList.remove("hidden");
   if (adminPinInput) {
@@ -2052,18 +2064,30 @@ function closeAdminPinGate() {
 
 function handleAdminPinSubmit() {
   const enteredPin = String(adminPinInput?.value || "").trim();
-  if (enteredPin !== ADMIN_PANEL_PIN) {
-    if (adminPinHelpElement) {
-      adminPinHelpElement.textContent = "PIN incorrecto.";
-    }
-    if (adminPinInput) {
-      adminPinInput.value = "";
-      adminPinInput.focus();
-    }
-    return;
+  if (!enteredPin) return;
+  if (adminPinHelpElement) {
+    adminPinHelpElement.textContent = "Verificando PIN...";
   }
-  closeAdminPinGate();
-  setAdminPanelOpen(true);
+  void (async () => {
+    try {
+      const pinHash = await sha256Hex(enteredPin);
+      const body = await postWorkerJson("/admin/auth", { pinHash });
+      adminSessionToken = String(body.token || "");
+      if (adminSessionToken) {
+        sessionStorage.setItem(ADMIN_SESSION_TOKEN_KEY, adminSessionToken);
+      }
+      closeAdminPinGate();
+      setAdminPanelOpen(true);
+    } catch (error) {
+      if (adminPinHelpElement) {
+        adminPinHelpElement.textContent = error.message || "PIN incorrecto.";
+      }
+      if (adminPinInput) {
+        adminPinInput.value = "";
+        adminPinInput.focus();
+      }
+    }
+  })();
 }
 
 function getCurrentGameTimeScale() {
