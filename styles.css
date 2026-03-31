@@ -3534,35 +3534,131 @@ button:hover {
   flex-wrap: wrap;
 }
 
-.admin-bets-table {
-  min-width: 1180px;
+.admin-bets-editor-shell {
+  width: 100%;
 }
 
-.admin-bets-table input,
-.admin-bets-table select {
+.admin-bets-editor-list {
+  display: grid;
+  gap: 14px;
+}
+
+.admin-bet-empty {
+  padding: 18px 16px;
+  border: 1px dashed rgba(255, 255, 255, 0.16);
+  border-radius: 16px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.admin-bet-card {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(255,255,255,0.1);
+  background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(0,0,0,0.1));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.06);
+}
+
+.admin-bet-card.is-inactive {
+  opacity: 0.72;
+}
+
+.admin-bet-card-top {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: start;
+}
+
+.admin-bet-title-wrap {
+  display: grid;
+  gap: 8px;
+}
+
+.admin-bet-title-input {
+  font-weight: 700;
+}
+
+.admin-bet-description-input {
+  font-size: 0.95rem;
+}
+
+.admin-bet-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.04);
+  white-space: nowrap;
+}
+
+.admin-bet-toggle input {
+  inline-size: 18px;
+  block-size: 18px;
+}
+
+.admin-bet-delete {
+  align-self: center;
+}
+
+.admin-bet-options-grid,
+.admin-bet-config-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.admin-bet-config-grid {
+  grid-template-columns: minmax(120px, 180px) minmax(220px, 1fr) minmax(240px, 1fr);
+}
+
+.admin-bet-field {
+  display: grid;
+  gap: 6px;
+}
+
+.admin-bet-field-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: var(--muted);
+}
+
+.admin-bet-field input,
+.admin-bet-field select {
   width: 100%;
   min-width: 0;
   border: 1px solid rgba(255,255,255,0.12);
   border-radius: 10px;
-  padding: 8px 10px;
+  padding: 10px 12px;
   font: inherit;
   color: #fff4dc;
   background: #2b2336;
 }
 
-.admin-bets-table select {
+.admin-bet-field select {
   appearance: auto;
   color-scheme: dark;
 }
 
-.admin-bets-table select option {
+.admin-bet-field select option {
   color: #fff4dc;
   background: #2b2336;
 }
 
-.admin-bets-table td:last-child button {
-  min-width: 0;
-  padding: 7px 10px;
+.admin-bet-field input:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.admin-bet-field-help {
+  color: rgba(255, 255, 255, 0.62);
+  line-height: 1.35;
+  min-height: 2.6em;
 }
 
 .admin-records-table {
@@ -4018,6 +4114,16 @@ button:hover {
 
   .advanced-auth-fields {
     grid-template-columns: 1fr;
+  }
+
+  .admin-bet-card-top,
+  .admin-bet-options-grid,
+  .admin-bet-config-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-bet-delete {
+    justify-self: start;
   }
 
   .advanced-bet-row,

@@ -59,6 +59,32 @@ const ADVANCED_BET_RULES = [
   { value: "movesGte", label: "Jugadas >= objetivo" },
   { value: "holeUsed", label: "Se usa H.O.L.E." },
 ];
+const ADVANCED_BET_RULE_HINTS = {
+  reasonUser: {
+    help: "No necesita objetivo. La opcion A gana si la partida termina con BY USER.",
+    placeholder: "No hace falta",
+  },
+  highestTileGte: {
+    help: "Pon una ficha objetivo, por ejemplo 256, 1024 o 4096.",
+    placeholder: "Ej. 256",
+  },
+  durationMinutesGte: {
+    help: "Pon minutos enteros. Ejemplo: 5 significa cinco minutos o mas.",
+    placeholder: "Ej. 5",
+  },
+  scoreGte: {
+    help: "Pon la puntuacion minima que debe alcanzarse.",
+    placeholder: "Ej. 10000",
+  },
+  movesGte: {
+    help: "Pon el numero minimo de jugadas necesarias.",
+    placeholder: "Ej. 200",
+  },
+  holeUsed: {
+    help: "No necesita objetivo. La opcion A gana si se activa H.O.L.E. durante la partida.",
+    placeholder: "No hace falta",
+  },
+};
 const DEFAULT_ADVANCED_BET_DEFINITIONS = [
   {
     id: "endReason",
@@ -1620,7 +1646,7 @@ function renderAdminOverview() {
     adminUsersBodyElement.innerHTML = '<tr><td class="admin-table-empty" colspan="10">Sin datos todavia.</td></tr>';
     renderAdminUserPanel();
     if (adminBetsBodyElement) {
-      adminBetsBodyElement.innerHTML = '<tr><td class="admin-table-empty" colspan="9">Cargando tipos de apuesta...</td></tr>';
+      adminBetsBodyElement.innerHTML = '<div class="admin-bet-empty">Cargando tipos de apuesta...</div>';
     }
     adminPanelStatusElement.textContent = adminPanelLoading ? "Cargando panel de control..." : "Pulsa Refrescar para leer el estado global.";
     return;
@@ -1925,73 +1951,121 @@ function setLedgerPanelOpen(nextOpen) {
 function renderAdminBetDefinitionsEditor() {
   if (!adminBetsBodyElement) return;
   if (!adminBetDefinitionsDraft.length) {
-    adminBetsBodyElement.innerHTML = '<tr><td class="admin-table-empty" colspan="9">No hay tipos de apuesta definidos.</td></tr>';
+    adminBetsBodyElement.innerHTML = '<div class="admin-bet-empty">No hay tipos de apuesta definidos.</div>';
     return;
   }
 
   adminBetsBodyElement.innerHTML = "";
   adminBetDefinitionsDraft.forEach((definition, index) => {
-    const row = document.createElement("tr");
+    const card = document.createElement("article");
+    card.className = "admin-bet-card";
 
-    const activeCell = document.createElement("td");
+    const topBar = document.createElement("div");
+    topBar.className = "admin-bet-card-top";
+
+    const activeWrap = document.createElement("label");
+    activeWrap.className = "admin-bet-toggle";
     const activeInput = document.createElement("input");
     activeInput.type = "checkbox";
     activeInput.checked = Boolean(definition.active);
     activeInput.addEventListener("change", () => {
       definition.active = activeInput.checked;
+      card.classList.toggle("is-inactive", !definition.active);
     });
-    activeCell.appendChild(activeInput);
+    const activeText = document.createElement("span");
+    activeText.textContent = "Activa";
+    activeWrap.append(activeInput, activeText);
 
-    const labelCell = document.createElement("td");
+    const titleWrap = document.createElement("div");
+    titleWrap.className = "admin-bet-title-wrap";
     const labelInput = document.createElement("input");
+    labelInput.className = "admin-bet-title-input";
     labelInput.value = definition.label;
     labelInput.maxLength = 36;
+    labelInput.placeholder = "Nombre de la apuesta";
     labelInput.addEventListener("input", () => {
       definition.label = labelInput.value;
       if (!definition.id) definition.id = slugifyBetId(labelInput.value);
     });
-    labelCell.appendChild(labelInput);
-
-    const descCell = document.createElement("td");
     const descInput = document.createElement("input");
+    descInput.className = "admin-bet-description-input";
     descInput.value = definition.description;
     descInput.maxLength = 120;
+    descInput.placeholder = "Explica claramente que se apuesta";
     descInput.addEventListener("input", () => {
       definition.description = descInput.value;
     });
-    descCell.appendChild(descInput);
+    titleWrap.append(labelInput, descInput);
 
-    const multiplierCell = document.createElement("td");
+    const deleteButton = document.createElement("button");
+    deleteButton.type = "button";
+    deleteButton.className = "danger-button admin-bet-delete";
+    deleteButton.textContent = "Borrar";
+    deleteButton.addEventListener("click", () => {
+      adminBetDefinitionsDraft.splice(index, 1);
+      renderAdminBetDefinitionsEditor();
+    });
+
+    topBar.append(activeWrap, titleWrap, deleteButton);
+
+    const optionsGrid = document.createElement("div");
+    optionsGrid.className = "admin-bet-options-grid";
+
+    const optionAGroup = document.createElement("label");
+    optionAGroup.className = "admin-bet-field";
+    const optionALabel = document.createElement("span");
+    optionALabel.className = "admin-bet-field-label";
+    optionALabel.textContent = "Opcion A";
+    const optionAInput = document.createElement("input");
+    optionAInput.value = definition.optionA;
+    optionAInput.maxLength = 28;
+    optionAInput.placeholder = "Texto de la opcion A";
+    optionAInput.addEventListener("input", () => {
+      definition.optionA = optionAInput.value;
+    });
+    optionAGroup.append(optionALabel, optionAInput);
+
+    const optionBGroup = document.createElement("label");
+    optionBGroup.className = "admin-bet-field";
+    const optionBLabel = document.createElement("span");
+    optionBLabel.className = "admin-bet-field-label";
+    optionBLabel.textContent = "Opcion B";
+    const optionBInput = document.createElement("input");
+    optionBInput.value = definition.optionB;
+    optionBInput.maxLength = 28;
+    optionBInput.placeholder = "Texto de la opcion B";
+    optionBInput.addEventListener("input", () => {
+      definition.optionB = optionBInput.value;
+    });
+    optionBGroup.append(optionBLabel, optionBInput);
+
+    optionsGrid.append(optionAGroup, optionBGroup);
+
+    const configGrid = document.createElement("div");
+    configGrid.className = "admin-bet-config-grid";
+
+    const multiplierGroup = document.createElement("label");
+    multiplierGroup.className = "admin-bet-field";
+    const multiplierLabel = document.createElement("span");
+    multiplierLabel.className = "admin-bet-field-label";
+    multiplierLabel.textContent = "Multiplicador";
     const multiplierInput = document.createElement("input");
     multiplierInput.type = "number";
     multiplierInput.step = "0.1";
     multiplierInput.min = "1.1";
     multiplierInput.max = "99";
     multiplierInput.value = String(definition.multiplier);
+    multiplierInput.placeholder = "Ej. 2.5";
     multiplierInput.addEventListener("input", () => {
       definition.multiplier = Number(multiplierInput.value || 2);
     });
-    multiplierCell.appendChild(multiplierInput);
+    multiplierGroup.append(multiplierLabel, multiplierInput);
 
-    const optionACell = document.createElement("td");
-    const optionAInput = document.createElement("input");
-    optionAInput.value = definition.optionA;
-    optionAInput.maxLength = 28;
-    optionAInput.addEventListener("input", () => {
-      definition.optionA = optionAInput.value;
-    });
-    optionACell.appendChild(optionAInput);
-
-    const optionBCell = document.createElement("td");
-    const optionBInput = document.createElement("input");
-    optionBInput.value = definition.optionB;
-    optionBInput.maxLength = 28;
-    optionBInput.addEventListener("input", () => {
-      definition.optionB = optionBInput.value;
-    });
-    optionBCell.appendChild(optionBInput);
-
-    const ruleCell = document.createElement("td");
+    const ruleGroup = document.createElement("label");
+    ruleGroup.className = "admin-bet-field";
+    const ruleLabel = document.createElement("span");
+    ruleLabel.className = "admin-bet-field-label";
+    ruleLabel.textContent = "Regla";
     const ruleSelect = document.createElement("select");
     ADVANCED_BET_RULES.forEach((rule) => {
       const option = document.createElement("option");
@@ -2000,34 +2074,40 @@ function renderAdminBetDefinitionsEditor() {
       if (rule.value === definition.rule) option.selected = true;
       ruleSelect.appendChild(option);
     });
-    ruleSelect.addEventListener("change", () => {
-      definition.rule = ruleSelect.value;
-    });
-    ruleCell.appendChild(ruleSelect);
+    ruleGroup.append(ruleLabel, ruleSelect);
 
-    const targetCell = document.createElement("td");
+    const targetGroup = document.createElement("label");
+    targetGroup.className = "admin-bet-field";
+    const targetLabel = document.createElement("span");
+    targetLabel.className = "admin-bet-field-label";
+    targetLabel.textContent = "Objetivo";
     const targetInput = document.createElement("input");
     targetInput.value = definition.target;
-    targetInput.placeholder = "Objetivo";
     targetInput.maxLength = 24;
     targetInput.addEventListener("input", () => {
       definition.target = targetInput.value;
     });
-    targetCell.appendChild(targetInput);
+    const targetHelp = document.createElement("small");
+    targetHelp.className = "admin-bet-field-help";
 
-    const actionCell = document.createElement("td");
-    const deleteButton = document.createElement("button");
-    deleteButton.type = "button";
-    deleteButton.className = "danger-button";
-    deleteButton.textContent = "Borrar";
-    deleteButton.addEventListener("click", () => {
-      adminBetDefinitionsDraft.splice(index, 1);
-      renderAdminBetDefinitionsEditor();
-    });
-    actionCell.appendChild(deleteButton);
+    const syncRuleUi = () => {
+      const hint = ADVANCED_BET_RULE_HINTS[ruleSelect.value] || ADVANCED_BET_RULE_HINTS.scoreGte;
+      definition.rule = ruleSelect.value;
+      targetInput.placeholder = hint.placeholder;
+      targetHelp.textContent = hint.help;
+      targetInput.disabled = ruleSelect.value === "reasonUser" || ruleSelect.value === "holeUsed";
+    };
 
-    row.append(activeCell, labelCell, descCell, multiplierCell, optionACell, optionBCell, ruleCell, targetCell, actionCell);
-    adminBetsBodyElement.appendChild(row);
+    ruleSelect.addEventListener("change", syncRuleUi);
+    syncRuleUi();
+
+    targetGroup.append(targetLabel, targetInput, targetHelp);
+
+    configGrid.append(multiplierGroup, ruleGroup, targetGroup);
+
+    card.classList.toggle("is-inactive", !definition.active);
+    card.append(topBar, optionsGrid, configGrid);
+    adminBetsBodyElement.appendChild(card);
   });
 }
 
