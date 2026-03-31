@@ -2343,7 +2343,7 @@ function renderStatsPanel() {
           <span class="stats-card-value">${gameState.bestScore}</span>
         </div>
         <div class="stats-card">
-          <span class="stats-card-label">Tiempo</span>
+          <span class="stats-card-label">Tiempo Real</span>
           <span class="stats-card-value">${elapsedText}</span>
         </div>
         <div class="stats-card">
