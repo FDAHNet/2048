@@ -2284,12 +2284,10 @@ function renderStatsPanel() {
   if (!statsPanelContentElement) return;
 
   const elapsedText = formatElapsedTime(getRealElapsedMs());
-  const highestTile = getHighestTileValue();
   const totalMoves = moveSequence;
   const averageScore = totalMoves ? (gameState.score / totalMoves).toFixed(1) : "0.0";
   const mode = `${boardSize}x${boardSize}`;
   const achievementValues = journalEntries.map((entry) => Number(entry.value) || 0);
-  const reasonLabel = gameState.over ? (lastGameOverReason || "BY MACHINE") : "EN JUEGO";
   const directionStats = getMoveDirectionStats();
   const milestoneTargets = [
     { label: "128", min: 128 },
@@ -2329,18 +2327,6 @@ function renderStatsPanel() {
         <div class="stats-card">
           <span class="stats-card-label">Modo</span>
           <span class="stats-card-value">${mode}</span>
-        </div>
-        <div class="stats-card">
-          <span class="stats-card-label">Final</span>
-          <span class="stats-card-value">${reasonLabel}</span>
-        </div>
-        <div class="stats-card">
-          <span class="stats-card-label">Puntuacion</span>
-          <span class="stats-card-value">${gameState.score}</span>
-        </div>
-        <div class="stats-card">
-          <span class="stats-card-label">Record local</span>
-          <span class="stats-card-value">${gameState.bestScore}</span>
         </div>
         <div class="stats-card">
           <span class="stats-card-label">Tiempo Real</span>
