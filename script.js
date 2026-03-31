@@ -459,6 +459,8 @@ const gameMovesElement = document.getElementById("game-moves");
 const showStatsButton = document.getElementById("show-stats-button");
 const statsPanelElement = document.getElementById("stats-panel");
 const statsPanelContentElement = document.getElementById("stats-panel-content");
+const heroElement = document.querySelector(".hero");
+const boardPanelElement = document.querySelector(".board-panel");
 
 if (recordCardModalElement && bestScoreCardElement && recordCardModalElement.parentElement !== bestScoreCardElement) {
   bestScoreCardElement.appendChild(recordCardModalElement);
@@ -1454,10 +1456,34 @@ function canShowLiveStats() {
   return !demoMode && !replayMode && attractDismissed && !awaitingManualStart;
 }
 
+function positionStatsPanel() {
+  if (!statsPanelElement) return;
+  if (window.innerWidth <= 1180) {
+    statsPanelElement.style.left = "";
+    statsPanelElement.style.top = "";
+    statsPanelElement.style.width = "";
+    statsPanelElement.style.maxHeight = "";
+    return;
+  }
+  const boardRect = boardPanelElement?.getBoundingClientRect();
+  if (!boardRect) return;
+  const heroRect = heroElement?.getBoundingClientRect();
+  const gap = 22;
+  const width = Math.max(500, Math.min(680, Math.round(window.innerWidth * 0.36)));
+  const left = Math.max(18, Math.round(boardRect.left - width - gap));
+  const top = Math.max(18, Math.round((heroRect?.top ?? 18) + 2));
+  const maxHeight = Math.max(360, Math.min(700, window.innerHeight - top - 24));
+  statsPanelElement.style.left = `${left}px`;
+  statsPanelElement.style.top = `${top}px`;
+  statsPanelElement.style.width = `${width}px`;
+  statsPanelElement.style.maxHeight = `${maxHeight}px`;
+}
+
 function setStatsPanelOpen(nextOpen) {
   statsPanelOpen = Boolean(nextOpen && canShowLiveStats());
   statsPanelElement?.classList.toggle("hidden", !statsPanelOpen);
   if (statsPanelOpen) {
+    positionStatsPanel();
     renderStatsPanel();
   }
 }
@@ -3852,6 +3878,7 @@ function render() {
   applyScoreSizing(bestScoreElement, gameState.bestScore);
   updateStatsButton();
   if (statsPanelOpen) {
+    positionStatsPanel();
     renderStatsPanel();
   }
   const now = performance.now();
@@ -6985,7 +7012,13 @@ document.querySelectorAll(".records-sort-select").forEach((select) => {
 window.addEventListener("keydown", handleKeydown);
 boardElement.addEventListener("touchstart", handleTouchStart, { passive: true });
 boardElement.addEventListener("touchend", handleTouchEnd, { passive: true });
-window.addEventListener("resize", render);
+window.addEventListener("resize", () => {
+  if (statsPanelOpen) positionStatsPanel();
+  render();
+});
+window.addEventListener("scroll", () => {
+  if (statsPanelOpen) positionStatsPanel();
+}, { passive: true });
 
 buildGrid();
 applyTheme(theme);

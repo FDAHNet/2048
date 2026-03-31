@@ -1711,13 +1711,14 @@ button:hover {
 }
 
 .stats-panel {
-  position: absolute;
-  right: calc(100% + 22px);
-  top: -150px;
-  width: clamp(460px, 36vw, 620px);
+  position: fixed;
+  left: 18px;
+  top: 18px;
+  width: 560px;
   min-height: 0;
-  max-height: min(520px, calc(var(--board-size) * 0.68));
+  max-height: 640px;
   display: block;
+  z-index: 55;
 }
 
 .stats-panel.hidden {
