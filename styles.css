@@ -1713,7 +1713,7 @@ button:hover {
 .stats-panel {
   position: absolute;
   right: calc(100% + 22px);
-  top: 0;
+  top: -150px;
   width: clamp(460px, 36vw, 620px);
   min-height: 0;
   max-height: min(520px, calc(var(--board-size) * 0.68));
@@ -3875,6 +3875,7 @@ button:hover {
 
   .stats-panel {
     position: static;
+    top: auto;
     margin-bottom: 14px;
   }
 
