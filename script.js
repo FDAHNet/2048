@@ -5251,7 +5251,16 @@ async function submitGlobalRecord() {
       }
     }, 6000);
   } catch (error) {
-    setStatus(`Error al enviar record: ${error.message}`);
+    const errorMessage = `Error al enviar record: ${error.message}`;
+    setStatus(errorMessage);
+    showSystemAnnouncement("Fallo al enviar record", "danger");
+    const shouldRetry = window.confirm(`${errorMessage}\n\n¿Quieres reintentar ahora?`);
+    if (shouldRetry) {
+      setStatus("Reintentando envio de record...");
+      window.setTimeout(() => {
+        void submitGlobalRecord();
+      }, 250);
+    }
   }
 }
 
