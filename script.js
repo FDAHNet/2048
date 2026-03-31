@@ -641,6 +641,7 @@ let commentaryLastIndexByCategory = {};
 let lastCommentaryScoreBucket = 0;
 let adminPanelOpen = false;
 let adminPinGateOpen = false;
+let adminPanelPausedGame = false;
 let adminPanelLoading = false;
 let adminSessionToken = sessionStorage.getItem(ADMIN_SESSION_TOKEN_KEY) || "";
 let adminOverview = null;
@@ -2159,9 +2160,21 @@ function setAdminPanelOpen(nextOpen) {
   adminPanelOpen = Boolean(nextOpen);
   adminPanelElement?.classList.toggle("hidden", !adminPanelOpen);
   if (adminPanelOpen) {
+    if (!demoMode && !replayMode && !gameState.over && !awaitingManualStart && !gamePaused) {
+      adminPanelPausedGame = true;
+      setGamePaused(true, { statusMessage: "Panel de control abierto.", persist: true });
+    } else {
+      adminPanelPausedGame = false;
+    }
     renderAdminOverview();
     void loadAdminOverview();
+    return;
   }
+  if (adminPanelPausedGame && gamePaused && !demoMode && !replayMode && !gameState.over) {
+    adminPanelPausedGame = false;
+    setGamePaused(false, { statusMessage: "Partida reanudada.", persist: true });
+  }
+  adminPanelPausedGame = false;
 }
 
 function openAdminPinGate() {
