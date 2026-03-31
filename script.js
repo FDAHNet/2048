@@ -40,7 +40,7 @@ const RECORD_CATEGORY_LABELS = {
   normal: "Normal",
   hole: "H.O.L.E.",
 };
-const DEFAULT_ADVANCED_CREDITS = 100;
+const DEFAULT_ADVANCED_CREDITS = 1000;
 const HOLE_SPEED_OPTIONS = [1, 2, 4, 8, 16, 32];
 const ADVANCED_BET_STAKES = [0, 5, 10, 20, 50];
 const MUSIC_TRACK_GAP_MS = 5000;
