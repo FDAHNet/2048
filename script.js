@@ -7,8 +7,9 @@ const MAX_SAFE_SLOT_REPLAY_TURNS = 120000;
 const MAX_SAFE_RECORD_REPLAY_TURNS = 500000;
 const MAX_SAFE_RECORD_REPLAY_BYTES = 3_200_000;
 const MAX_WORKER_DIRECT_REPLAY_BYTES = 2_200_000;
-const REMOTE_REPLAY_CHUNK_BYTES = 320_000;
+const REMOTE_REPLAY_CHUNK_BYTES = 96_000;
 const MAX_REMOTE_REPLAY_PARTS = 4_000;
+const REMOTE_REPLAY_UPLOAD_RETRIES = 3;
 const STORAGE_PREFIX = "smooth-2048-best-score";
 const RECORDS_PREFIX = "smooth-2048-records";
 const MAX_RECORDS_PER_MODE = 10;
@@ -3883,13 +3884,29 @@ async function uploadReplayToWorker(replayPayload, recordMeta) {
 
   const replayId = buildReplayRefId(recordMeta);
   for (let index = 0; index < chunks.length; index += 1) {
-    await postWorkerJson("/replay/upload", {
-      replayId,
-      mode: recordMeta.mode,
-      partIndex: index,
-      partCount: chunks.length,
-      chunk: chunks[index],
-    });
+    setStatus(`Subiendo replay completa por bloques... ${index + 1}/${chunks.length}`);
+    let uploaded = false;
+    let lastError = null;
+    for (let attempt = 1; attempt <= REMOTE_REPLAY_UPLOAD_RETRIES && !uploaded; attempt += 1) {
+      try {
+        await postWorkerJson("/replay/upload", {
+          replayId,
+          mode: recordMeta.mode,
+          partIndex: index,
+          partCount: chunks.length,
+          chunk: chunks[index],
+        });
+        uploaded = true;
+      } catch (error) {
+        lastError = error;
+        if (attempt < REMOTE_REPLAY_UPLOAD_RETRIES) {
+          await new Promise((resolve) => window.setTimeout(resolve, attempt * 350));
+        }
+      }
+    }
+    if (!uploaded) {
+      throw new Error(`Fallo al subir el bloque ${index + 1}/${chunks.length}: ${lastError?.message || "sin respuesta"}`);
+    }
   }
 
   return {
@@ -5200,7 +5217,6 @@ async function submitGlobalRecord() {
     const replayBytes = replayForSubmission ? estimateReplayPayloadBytes(replayForSubmission) : 0;
 
     if (replayForSubmission && replayBytes > MAX_WORKER_DIRECT_REPLAY_BYTES) {
-      setStatus("Subiendo replay completa por bloques...");
       replayRef = await uploadReplayToWorker(replayForSubmission, recordToSubmit);
       replayForSubmission = null;
     }
