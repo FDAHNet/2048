@@ -2403,6 +2403,9 @@ function closeStatsMilestonePopover() {
     delete statsMilestonePopoverElement.dataset.forLabel;
   }
   statsMilestonePopoverElement?.replaceChildren();
+  if (statsPanelOpen && canShowLiveStats() && !canShowPostGameStats()) {
+    renderStatsPanel();
+  }
 }
 
 function openStatsMilestonePopover(cardElement, milestoneLabel, entries = []) {
@@ -2429,10 +2432,12 @@ function openStatsMilestonePopover(cardElement, milestoneLabel, entries = []) {
   body.style.height = "260px";
   body.style.maxHeight = "260px";
   body.style.minHeight = "260px";
+  body.style.flex = "1 1 auto";
   body.style.overflowY = "auto";
   body.style.overflowX = "hidden";
   body.style.scrollbarWidth = "thin";
   body.style.webkitOverflowScrolling = "touch";
+  body.addEventListener("wheel", (event) => event.stopPropagation(), { passive: true });
 
   if (!entries.length) {
     const empty = document.createElement("div");
@@ -4429,7 +4434,9 @@ function render() {
   updateStatsButton();
   if (statsPanelOpen) {
     positionStatsPanel();
-    renderStatsPanel();
+    if (!(statsMilestonePopoverState && canShowLiveStats() && !canShowPostGameStats())) {
+      renderStatsPanel();
+    }
   }
   const now = performance.now();
   const activeIds = new Set();
