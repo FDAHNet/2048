@@ -2474,7 +2474,8 @@ async function updateAdminPanelPin() {
 function renderStatsPanel() {
   if (!statsPanelContentElement) return;
 
-  const elapsedText = formatElapsedTime(getRealElapsedMs());
+  const realElapsedMs = getRealElapsedMs();
+  const elapsedText = formatElapsedTime(realElapsedMs);
   const totalMoves = moveSequence;
   const averageScore = totalMoves ? (gameState.score / totalMoves).toFixed(1) : "0.0";
   const mode = `${boardSize}x${boardSize}`;
@@ -2484,8 +2485,13 @@ function renderStatsPanel() {
   const milestoneStats = getMilestoneStats();
   const highestTile = getHighestTileValue();
   const directionTotal = Object.values(directionStats).reduce((sum, count) => sum + count, 0);
-  const scorePerMinute = Number(elapsedText === "00:00:00" ? 0 : (gameState.score / Math.max(1 / 60, getRealElapsedMs() / 60000))).toFixed(1);
-  const movesPerMinute = Number(totalMoves / Math.max(1 / 60, getRealElapsedMs() / 60000)).toFixed(1);
+  const elapsedMinutes = Math.max(1 / 60, realElapsedMs / 60000);
+  const elapsedHours = Math.max(1 / 3600, realElapsedMs / 3600000);
+  const elapsedSeconds = Math.max(1, realElapsedMs / 1000);
+  const scorePerMinute = Number(elapsedText === "00:00:00" ? 0 : (gameState.score / elapsedMinutes)).toFixed(1);
+  const movesPerMinute = Number(totalMoves / elapsedMinutes).toFixed(1);
+  const movesPerHour = Number(totalMoves / elapsedHours).toFixed(1);
+  const movesPerSecond = Number(totalMoves / elapsedSeconds).toFixed(2);
   const totalAchievements = achievementValues.length;
   const empties = getEmptyCellCount();
   const topDirectionEntry = Object.entries(directionStats).sort((a, b) => b[1] - a[1])[0] || ["up", 0];
@@ -2545,9 +2551,25 @@ function renderStatsPanel() {
           <span class="stats-card-label">Tiempo Real</span>
           <span class="stats-card-value">${elapsedText}</span>
         </div>
-        <div class="stats-card">
-          <span class="stats-card-label">Jugadas</span>
-          <span class="stats-card-value">${totalMoves}</span>
+        <div class="stats-card stats-card-split">
+          <div class="stats-split-item">
+            <span class="stats-card-label">Jugadas</span>
+            <span class="stats-card-value">${totalMoves}</span>
+          </div>
+          <div class="stats-split-item">
+            <span class="stats-card-label">Jugadas por segundo</span>
+            <span class="stats-card-value">${movesPerSecond}</span>
+          </div>
+        </div>
+        <div class="stats-card stats-card-split">
+          <div class="stats-split-item">
+            <span class="stats-card-label">Jugadas por minuto</span>
+            <span class="stats-card-value">${movesPerMinute}</span>
+          </div>
+          <div class="stats-split-item">
+            <span class="stats-card-label">Jugadas por hora</span>
+            <span class="stats-card-value">${movesPerHour}</span>
+          </div>
         </div>
         <div class="stats-card">
           <span class="stats-card-label">Puntos por jugada</span>

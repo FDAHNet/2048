@@ -1860,6 +1860,21 @@ button:hover {
   background: rgba(255,255,255,0.06);
 }
 
+.stats-card-split {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.stats-split-item {
+  min-width: 0;
+}
+
+.stats-split-item + .stats-split-item {
+  border-left: 1px solid rgba(255,255,255,0.08);
+  padding-left: 12px;
+}
+
 .stats-card-label {
   display: block;
   color: var(--muted);
@@ -1875,6 +1890,16 @@ button:hover {
   font-size: clamp(0.66rem, 1.05vw, 0.82rem);
   line-height: 1.55;
   color: var(--accent);
+}
+
+.stats-split-item .stats-card-label {
+  font-size: 0.6rem;
+  letter-spacing: 0.08em;
+}
+
+.stats-split-item .stats-card-value {
+  font-size: clamp(0.58rem, 0.88vw, 0.72rem);
+  line-height: 1.45;
 }
 
 .stats-milestones-grid {
