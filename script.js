@@ -487,6 +487,12 @@ const statsPanelElement = document.getElementById("stats-panel");
 const statsPanelContentElement = document.getElementById("stats-panel-content");
 const statsEyebrowElement = document.getElementById("stats-eyebrow");
 const shareStatsButton = document.getElementById("share-stats-button");
+const statsShareModalElement = document.getElementById("stats-share-modal");
+const closeStatsShareButton = document.getElementById("close-stats-share-button");
+const statsShareEmailButton = document.getElementById("stats-share-email-button");
+const statsShareCopyButton = document.getElementById("stats-share-copy-button");
+const statsShareDownloadButton = document.getElementById("stats-share-download-button");
+const statsShareTextElement = document.getElementById("stats-share-text");
 const statsMilestonePopoverElement = document.getElementById("stats-milestone-popover");
 const heroElement = document.querySelector(".hero");
 const boardPanelElement = document.querySelector(".board-panel");
@@ -642,6 +648,7 @@ let currentTickerMessage = "";
 let currentTickerTone = "normal";
 let queuedTickerMessage = "";
 let queuedTickerTone = "normal";
+let statsShareModalOpen = false;
 let commentaryLastIndexByCategory = {};
 let lastCommentaryScoreBucket = 0;
 let lastAmbientCommentaryMove = 0;
@@ -1545,6 +1552,8 @@ function setStatsPanelOpen(nextOpen) {
   statsPanelOpen = Boolean(nextOpen && canOpen);
   statsPanelElement?.classList.toggle("hidden", !statsPanelOpen);
   if (!statsPanelOpen) {
+    statsShareModalOpen = false;
+    statsShareModalElement?.classList.add("hidden");
     closeStatsMilestonePopover();
   }
   if (statsPanelOpen) {
@@ -1561,6 +1570,15 @@ function updateStatsButton() {
   showStatsButton.classList.toggle("hidden", !visible);
   showStatsButton.textContent = live ? "Estadisticas en Tiempo Real" : "Ver Estadisticas";
   shareStatsButton?.classList.toggle("hidden", !postGame);
+}
+
+function setStatsShareModalOpen(nextOpen) {
+  statsShareModalOpen = Boolean(nextOpen && canShowPostGameStats());
+  statsShareModalElement?.classList.toggle("hidden", !statsShareModalOpen);
+  if (statsShareTextElement && statsShareModalOpen) {
+    statsShareTextElement.value = buildFinalStatsEmailBody();
+    statsShareTextElement.scrollTop = 0;
+  }
 }
 
 function formatElapsedTime(ms) {
@@ -7453,20 +7471,36 @@ statsPanelContentElement?.addEventListener("keydown", (event) => {
 closeStatsButton?.addEventListener("click", () => setStatsPanelOpen(false));
 shareStatsButton?.addEventListener("click", () => {
   if (!canShowPostGameStats()) return;
+  setStatsShareModalOpen(true);
+});
+closeStatsShareButton?.addEventListener("click", () => setStatsShareModalOpen(false));
+statsShareEmailButton?.addEventListener("click", () => {
+  if (!canShowPostGameStats()) return;
   const subject = encodeURIComponent(`Estadisticas Finales 2048 Angeloso ${boardSize}x${boardSize}`);
-  const fullBody = buildFinalStatsEmailBody();
-  const summaryBody = buildFinalStatsEmailSummaryBody();
-  const encodedSummary = encodeURIComponent(summaryBody);
-  const mailtoUrl = `mailto:?subject=${subject}&body=${encodedSummary}`;
-  const shouldCopyFullReport = fullBody.length > 1400;
-
-  if (shouldCopyFullReport && navigator.clipboard?.writeText) {
-    navigator.clipboard.writeText(fullBody)
-      .then(() => setStatus("Resumen abierto en email. Informe completo copiado al portapapeles."))
-      .catch(() => setStatus("Resumen abierto en email."));
+  const body = encodeURIComponent(buildFinalStatsEmailSummaryBody());
+  window.location.href = `mailto:?subject=${subject}&body=${body}`;
+});
+statsShareCopyButton?.addEventListener("click", async () => {
+  if (!statsShareTextElement?.value) return;
+  try {
+    await navigator.clipboard.writeText(statsShareTextElement.value);
+    setStatus("Informe completo copiado.");
+  } catch {
+    setStatus("No pude copiar el informe.");
   }
-
-  window.location.href = mailtoUrl;
+});
+statsShareDownloadButton?.addEventListener("click", () => {
+  const content = statsShareTextElement?.value || buildFinalStatsEmailBody();
+  const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `2048-estadisticas-${boardSize}x${boardSize}-${Date.now()}.txt`;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 500);
+  setStatus("Informe descargado.");
 });
 closeAdminButton?.addEventListener("click", () => {
   closeAdminUserPanel();

@@ -187,6 +187,19 @@
           </div>
           <div id="stats-panel-content" class="stats-panel-content"></div>
           <div id="stats-milestone-popover" class="stats-milestone-popover hidden" aria-live="polite"></div>
+          <div id="stats-share-modal" class="stats-share-modal hidden" aria-live="polite">
+            <div class="stats-share-modal-head">
+              <strong>Compartir Estadisticas Finales</strong>
+              <button id="close-stats-share-button" type="button" class="stats-close-button" aria-label="Cerrar compartir">X</button>
+            </div>
+            <p class="stats-share-copy">Abre tu correo con un resumen corto y usa el informe completo de abajo si quieres enviarlo entero.</p>
+            <div class="stats-share-actions">
+              <button id="stats-share-email-button" type="button" class="primary-button">Abrir email</button>
+              <button id="stats-share-copy-button" type="button" class="secondary-button">Copiar informe</button>
+              <button id="stats-share-download-button" type="button" class="secondary-button">Descargar TXT</button>
+            </div>
+            <textarea id="stats-share-text" class="stats-share-text" readonly></textarea>
+          </div>
         </div>
       </aside>
       <section class="board-panel">

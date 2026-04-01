@@ -1839,6 +1839,66 @@ button:hover {
   filter: brightness(1.08);
 }
 
+.stats-share-modal {
+  position: absolute;
+  inset: 18px;
+  z-index: 26;
+  display: grid;
+  grid-template-rows: auto auto auto minmax(0, 1fr);
+  gap: 12px;
+  padding: 18px;
+  border-radius: 22px;
+  border: 1px solid rgba(255,255,255,0.14);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.08), rgba(0,0,0,0.18)),
+    color-mix(in srgb, var(--panel-solid) 92%, black 8%);
+  box-shadow: 0 18px 36px rgba(0,0,0,0.3);
+}
+
+.stats-share-modal.hidden {
+  display: none;
+}
+
+.stats-share-modal-head {
+  position: relative;
+  padding-right: 38px;
+  font-family: "Press Start 2P", "Space Grotesk", sans-serif;
+  font-size: 0.72rem;
+  line-height: 1.5;
+  color: var(--accent);
+}
+
+.stats-share-modal-head .stats-close-button {
+  top: 0;
+  right: 0;
+}
+
+.stats-share-copy {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+.stats-share-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.stats-share-text {
+  width: 100%;
+  min-height: 280px;
+  resize: none;
+  border-radius: 16px;
+  border: 1px solid rgba(255,255,255,0.1);
+  background: rgba(0,0,0,0.22);
+  color: var(--text);
+  padding: 14px;
+  font: inherit;
+  line-height: 1.45;
+}
+
 .stats-panel-content {
   flex: 1 1 auto;
   min-height: 0;
