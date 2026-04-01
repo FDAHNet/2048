@@ -2416,7 +2416,13 @@ function openStatsMilestonePopover(cardElement, milestoneLabel, entries = []) {
   closeButton.type = "button";
   closeButton.className = "stats-milestone-popover-close";
   closeButton.textContent = "X";
-  closeButton.addEventListener("click", () => closeStatsMilestonePopover(), { once: true });
+  const handleClose = (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    closeStatsMilestonePopover();
+  };
+  closeButton.addEventListener("pointerdown", handleClose, { once: true });
+  closeButton.addEventListener("click", handleClose, { once: true });
 
   const body = document.createElement("div");
   body.className = "stats-milestone-popover-body";
