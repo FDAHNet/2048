@@ -7381,8 +7381,7 @@ showStatsButton?.addEventListener("click", () => {
   if (!(canShowLiveStats() || canShowPostGameStats())) return;
   setStatsPanelOpen(!statsPanelOpen);
 });
-statsPanelContentElement?.addEventListener("click", (event) => {
-  const target = event.target;
+function handleStatsMilestoneActivation(target) {
   if (!(target instanceof Element)) return;
   const card = target.closest(".stats-milestone-card");
   if (!card) return;
@@ -7401,6 +7400,17 @@ statsPanelContentElement?.addEventListener("click", (event) => {
     statsMilestonePopoverElement.dataset.forLabel = label;
   }
   openStatsMilestonePopover(card, label, entries);
+}
+
+statsPanelContentElement?.addEventListener("pointerdown", (event) => {
+  event.preventDefault();
+  handleStatsMilestoneActivation(event.target);
+});
+
+statsPanelContentElement?.addEventListener("keydown", (event) => {
+  if (event.key !== "Enter" && event.key !== " ") return;
+  event.preventDefault();
+  handleStatsMilestoneActivation(event.target);
 });
 closeStatsButton?.addEventListener("click", () => setStatsPanelOpen(false));
 shareStatsButton?.addEventListener("click", () => {
