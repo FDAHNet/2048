@@ -643,6 +643,7 @@ let currentTickerTone = "normal";
 let commentaryLastIndexByCategory = {};
 let lastCommentaryScoreBucket = 0;
 let lastAmbientCommentaryMove = 0;
+let lastCommentaryAt = 0;
 let adminPanelOpen = false;
 let adminPinGateOpen = false;
 let adminPanelPausedGame = false;
@@ -1483,7 +1484,7 @@ function setGameOverOverlay(visible, reason = "") {
   }
   if (visible) {
     showSystemAnnouncement(reason === "BY USER" ? "Partida cerrada por el jugador" : "GAME OVER · Sin movimientos", "danger");
-    announceMatchCommentary(reason === "BY USER" ? "gameOverUser" : "gameOverMachine", { score: gameState.score }, "danger");
+    announceMatchCommentary(reason === "BY USER" ? "gameOverUser" : "gameOverMachine", { score: gameState.score }, "danger", { force: true });
   }
   updateStatsButton();
 }
@@ -2447,29 +2448,33 @@ function noteDecisiveMoment(label) {
 function updateMomentumFromBoard() {
   const nextLabel = getMatchMomentLabel();
   momentumLabel = nextLabel;
-  if (!demoMode && !holeMode && nextLabel !== lastMomentumAnnouncement) {
+  if (!demoMode && nextLabel !== lastMomentumAnnouncement) {
     if (nextLabel === "En apuros" || nextLabel === "Final agonico") {
-      announceMatchCommentary("danger", { moves: moveSequence }, "accent");
-      lastMomentumAnnouncement = nextLabel;
+      if (announceMatchCommentary("danger", { moves: moveSequence }, "accent")) {
+        lastMomentumAnnouncement = nextLabel;
+      }
     } else if (nextLabel === "Remontada" || nextLabel === "Dominando") {
-      announceMatchCommentary(nextLabel === "Remontada" ? "comeback" : "build", { moves: moveSequence }, "accent");
-      lastMomentumAnnouncement = nextLabel;
+      if (announceMatchCommentary(nextLabel === "Remontada" ? "comeback" : "build", { moves: moveSequence }, "accent")) {
+        lastMomentumAnnouncement = nextLabel;
+      }
     } else if (nextLabel === "Controlando" || nextLabel === "Tablero abierto") {
-      announceMatchCommentary("build", { moves: moveSequence }, "normal");
-      lastMomentumAnnouncement = nextLabel;
+      if (announceMatchCommentary("build", { moves: moveSequence }, "normal")) {
+        lastMomentumAnnouncement = nextLabel;
+      }
     } else if (nextLabel === "Partido vivo") {
-      announceMatchCommentary("pressure", { moves: moveSequence }, "normal");
-      lastMomentumAnnouncement = nextLabel;
+      if (announceMatchCommentary("pressure", { moves: moveSequence }, "normal")) {
+        lastMomentumAnnouncement = nextLabel;
+      }
     }
   }
 }
 
 function maybeAnnounceAmbientCommentary(nextMoveNumber, gained = 0, highestMerge = 0, crossedScoreBucket = false) {
-  if (demoMode || holeMode) return;
+  if (demoMode) return;
   if (highestMerge >= 128 || crossedScoreBucket) return;
   if (nextMoveNumber <= 1) return;
 
-  const interval = nextMoveNumber < 12 ? 2 : nextMoveNumber < 40 ? 3 : 4;
+  const interval = holeMode ? (nextMoveNumber < 30 ? 12 : nextMoveNumber < 120 ? 18 : 24) : (nextMoveNumber < 12 ? 2 : nextMoveNumber < 40 ? 3 : 4);
   if ((nextMoveNumber - lastAmbientCommentaryMove) < interval) return;
 
   const matchMoment = getMatchMomentLabel();
@@ -2490,6 +2495,37 @@ function maybeAnnounceAmbientCommentary(nextMoveNumber, gained = 0, highestMerge
 
   lastAmbientCommentaryMove = nextMoveNumber;
   announceMatchCommentary(category, { moves: nextMoveNumber, score: gameState.score }, category === "danger" ? "accent" : "normal");
+}
+
+function getCommentaryCooldownMs(tone = "normal") {
+  if (replayMode || demoMode || gamePaused || gameState.over) return Number.POSITIVE_INFINITY;
+  const base = holeMode ? 2500 : 3600;
+  if (tone === "record") return base + 1800;
+  if (tone === "accent" || tone === "danger") return base + 700;
+  return base;
+}
+
+function maybePulseCommentary() {
+  if (replayMode || demoMode || gamePaused || gameState.over || !moveSequence) return;
+  if ((Date.now() - lastCommentaryAt) < getCommentaryCooldownMs("normal")) return;
+
+  const matchMoment = getMatchMomentLabel();
+  const empties = getEmptyCellCount();
+  let category = "pressure";
+
+  if (currentFusionStreak >= 3) {
+    category = "comeback";
+  } else if (matchMoment === "En apuros" || matchMoment === "Final agonico" || empties <= 2) {
+    category = moveSequence % 2 === 0 ? "danger" : "pressure";
+  } else if (matchMoment === "Dominando" || matchMoment === "Controlando" || matchMoment === "Tablero abierto") {
+    category = "build";
+  } else if (moveSequence % 7 === 0) {
+    category = "score";
+  } else if (moveSequence % 5 === 0) {
+    category = "comeback";
+  }
+
+  announceMatchCommentary(category, { moves: moveSequence, score: gameState.score }, category === "danger" ? "accent" : "normal");
 }
 
 async function updateAdminUserPin() {
@@ -2766,6 +2802,7 @@ function startGameTimer() {
     if (replayMode || gameState.over || demoMode || gamePaused) return;
     renderGameTimer();
     maybeCelebrateTimeMilestone();
+    maybePulseCommentary();
     maybeAutosaveSession();
   }, 250);
 }
@@ -2788,7 +2825,7 @@ function triggerTimeMilestoneFx(minutes) {
 
   playTimeMilestoneSound();
   setStatus(`${minutes} minutos de partida.`);
-  announceMatchCommentary("marathon", { minutes }, "accent");
+  announceMatchCommentary("marathon", { minutes }, "accent", { force: true });
   showSystemAnnouncement(`${minutes} MINUTOS`, "accent");
 }
 
@@ -3383,6 +3420,7 @@ function startGame(options = {}) {
   lastMomentumAnnouncement = "";
   lastCommentaryScoreBucket = 0;
   lastAmbientCommentaryMove = 0;
+  lastCommentaryAt = 0;
   commentaryLastIndexByCategory = {};
   globalRecordFanfarePlayed = false;
   globalRecordsLoaded = hasAnyGlobalRecords(globalRecordsCache);
@@ -3423,7 +3461,7 @@ function startGame(options = {}) {
   }
   setStatus(demoMode ? "MODO DEMO" : "");
   if (!demoMode) {
-    announceMatchCommentary("kickoff", { mode: `${boardSize}x${boardSize}` }, "accent");
+    announceMatchCommentary("kickoff", { mode: `${boardSize}x${boardSize}` }, "accent", { force: true });
   }
   if (demoMode) scheduleDemoMove();
 }
@@ -4234,7 +4272,7 @@ function maybeCelebrateLiveGlobalRecord() {
     activateBestScoreCelebration();
     playGlobalRecordFanfare();
     setStatus("Nuevo record global en juego.");
-    announceMatchCommentary("record", { mode, score: gameState.score }, "record");
+    announceMatchCommentary("record", { mode, score: gameState.score }, "record", { force: true });
     showSystemAnnouncement("Nuevo record global", "record");
   }
 }
@@ -4594,11 +4632,14 @@ function pickCommentaryLine(category) {
   return lines[nextIndex];
 }
 
-function announceMatchCommentary(category, data = {}, tone = "normal") {
-  if (holeMode) return;
+function announceMatchCommentary(category, data = {}, tone = "normal", options = {}) {
+  const { force = false } = options;
   const template = pickCommentaryLine(category);
-  if (!template) return;
+  if (!template) return false;
+  if (!force && (Date.now() - lastCommentaryAt) < getCommentaryCooldownMs(tone)) return false;
   setTickerMessage(formatCommentaryTemplate(template, data), tone);
+  lastCommentaryAt = Date.now();
+  return true;
 }
 
 function shouldStatusFeedTicker(message) {
@@ -6530,7 +6571,7 @@ function move(direction) {
     const scoreBucket = Math.floor(gameState.score / 1000);
     const nextMoveNumber = moveSequence + 1;
     const crossedScoreBucket = scoreBucket > lastCommentaryScoreBucket;
-    if (!demoMode && !holeMode) {
+    if (!demoMode) {
       if (gained > 0) {
         currentFusionStreak += 1;
         bestFusionStreak = Math.max(bestFusionStreak, currentFusionStreak);
@@ -6548,13 +6589,13 @@ function move(direction) {
       }
       if (highestMerge >= 2048) {
         noteDecisiveMoment(`Se logro ${highestMerge}`);
-        announceMatchCommentary("tile2048", { value: highestMerge }, "record");
+        announceMatchCommentary("tile2048", { value: highestMerge }, "record", { force: true });
       } else if (highestMerge >= 1024) {
         noteDecisiveMoment(`Se alcanzo ${highestMerge}`);
-        announceMatchCommentary("tile1024", { value: highestMerge }, "accent");
+        announceMatchCommentary("tile1024", { value: highestMerge }, "accent", { force: true });
       } else if (highestMerge >= 512) {
         noteDecisiveMoment(`Se alcanzo ${highestMerge}`);
-        announceMatchCommentary("tile512", { value: highestMerge }, "accent");
+        announceMatchCommentary("tile512", { value: highestMerge }, "accent", { force: true });
       } else if (highestMerge >= 256) {
         announceMatchCommentary("tile256", { value: highestMerge }, "normal");
       } else if (highestMerge >= 128) {
