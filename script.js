@@ -640,6 +640,8 @@ let creditsDisplayValue = Number(advancedCredits || 0);
 let creditsAnimationFrame = null;
 let currentTickerMessage = "";
 let currentTickerTone = "normal";
+let queuedTickerMessage = "";
+let queuedTickerTone = "normal";
 let commentaryLastIndexByCategory = {};
 let lastCommentaryScoreBucket = 0;
 let lastAmbientCommentaryMove = 0;
@@ -4680,7 +4682,12 @@ function shouldStatusFeedTicker(message) {
   return true;
 }
 
-function setTickerMessage(message, tone = "normal") {
+function getTickerDurationMs(text) {
+  const length = String(text || "").trim().length;
+  return Math.max(9000, Math.min(16000, 3200 + (length * 88)));
+}
+
+function applyTickerMessage(message, tone = "normal") {
   if (!systemTickerTextElement || !systemTickerTrackElement) return;
   const text = String(message || "").trim() || "Angeloso Arcade System listo para jugar.";
   if (text === currentTickerMessage && tone === currentTickerTone) return;
@@ -4688,10 +4695,35 @@ function setTickerMessage(message, tone = "normal") {
   currentTickerTone = tone;
   systemTickerTextElement.textContent = text;
   systemTickerTrackElement.dataset.tone = tone;
+  systemTickerTrackElement.style.animationDuration = `${getTickerDurationMs(text)}ms`;
   systemTickerTrackElement.style.animation = "none";
   void systemTickerTrackElement.offsetWidth;
   systemTickerTrackElement.style.animation = "";
 }
+
+function flushQueuedTickerMessage() {
+  if (!queuedTickerMessage) return;
+  const nextMessage = queuedTickerMessage;
+  const nextTone = queuedTickerTone;
+  queuedTickerMessage = "";
+  queuedTickerTone = "normal";
+  applyTickerMessage(nextMessage, nextTone);
+}
+
+function setTickerMessage(message, tone = "normal") {
+  const text = String(message || "").trim() || "Angeloso Arcade System listo para jugar.";
+  if (!currentTickerMessage) {
+    applyTickerMessage(text, tone);
+    return;
+  }
+  if (text === currentTickerMessage && tone === currentTickerTone) return;
+  queuedTickerMessage = text;
+  queuedTickerTone = tone;
+}
+
+systemTickerTrackElement?.addEventListener("animationiteration", () => {
+  flushQueuedTickerMessage();
+});
 
 function showSystemAnnouncement(message, tone = "accent") {
   if (!systemAnnouncementLayerElement || !message) return;
