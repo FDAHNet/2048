@@ -487,6 +487,7 @@ const statsPanelElement = document.getElementById("stats-panel");
 const statsPanelContentElement = document.getElementById("stats-panel-content");
 const statsEyebrowElement = document.getElementById("stats-eyebrow");
 const shareStatsButton = document.getElementById("share-stats-button");
+const statsMilestonePopoverElement = document.getElementById("stats-milestone-popover");
 const heroElement = document.querySelector(".hero");
 const boardPanelElement = document.querySelector(".board-panel");
 
@@ -1536,6 +1537,9 @@ function setStatsPanelOpen(nextOpen) {
   const canOpen = canShowLiveStats() || canShowPostGameStats();
   statsPanelOpen = Boolean(nextOpen && canOpen);
   statsPanelElement?.classList.toggle("hidden", !statsPanelOpen);
+  if (!statsPanelOpen) {
+    closeStatsMilestonePopover();
+  }
   if (statsPanelOpen) {
     positionStatsPanel();
     renderStatsPanel();
@@ -2353,6 +2357,71 @@ function getMilestoneStats() {
   });
 }
 
+function getMilestonePopoverEntries(min, nextMin = Infinity) {
+  return journalEntries
+    .filter((entry) => {
+      const value = Number(entry.value || 0);
+      return value >= min && value < nextMin;
+    })
+    .map((entry) => ({
+      value: entry.value,
+      elapsedText: entry.elapsedText || "--:--:--",
+      timeText: entry.timeText || "--:--:--",
+      coord: formatBoardCoordinate(entry.row, entry.col),
+    }));
+}
+
+function closeStatsMilestonePopover() {
+  statsMilestonePopoverElement?.classList.add("hidden");
+  statsMilestonePopoverElement?.replaceChildren();
+}
+
+function openStatsMilestonePopover(cardElement, milestoneLabel, entries = []) {
+  if (!statsMilestonePopoverElement || !cardElement) return;
+
+  const title = document.createElement("strong");
+  title.className = "stats-milestone-popover-title";
+  title.textContent = milestoneLabel;
+
+  const body = document.createElement("div");
+  body.className = "stats-milestone-popover-body";
+
+  if (!entries.length) {
+    const empty = document.createElement("div");
+    empty.className = "stats-milestone-popover-empty";
+    empty.textContent = "Todavia no hay logros de esta ficha.";
+    body.appendChild(empty);
+  } else {
+    entries.forEach((entry) => {
+      const row = document.createElement("div");
+      row.className = "stats-milestone-popover-row";
+      row.innerHTML = `<span>${formatAdminNumber(entry.value)} · ${entry.coord}</span><span>${entry.elapsedText}</span>`;
+      body.appendChild(row);
+    });
+  }
+
+  statsMilestonePopoverElement.replaceChildren(title, body);
+  statsMilestonePopoverElement.classList.remove("hidden");
+
+  const cardRect = cardElement.getBoundingClientRect();
+  const shellRect = statsPanelElement?.querySelector(".stats-panel-shell")?.getBoundingClientRect();
+  if (!shellRect) return;
+
+  const desiredWidth = 280;
+  const left = Math.max(
+    12,
+    Math.min(
+      shellRect.width - desiredWidth - 12,
+      (cardRect.left - shellRect.left) + (cardRect.width / 2) - (desiredWidth / 2)
+    )
+  );
+  const top = Math.max(58, (cardRect.top - shellRect.top) - 12);
+
+  statsMilestonePopoverElement.style.width = `${desiredWidth}px`;
+  statsMilestonePopoverElement.style.left = `${Math.round(left)}px`;
+  statsMilestonePopoverElement.style.top = `${Math.round(top)}px`;
+}
+
 function getEmptyCellCount(state = gameState) {
   return state.cells.flat().filter((tile) => !tile).length;
 }
@@ -2497,13 +2566,14 @@ function renderStatsPanel() {
   const topDirectionEntry = Object.entries(directionStats).sort((a, b) => b[1] - a[1])[0] || ["up", 0];
   const lowDirectionEntry = Object.entries(directionStats).sort((a, b) => a[1] - b[1])[0] || ["up", 0];
   const milestoneCards = milestoneStats
-    .map(({ label, min }) => {
+    .map(({ label, min }, index) => {
       const count = achievementValues.filter((value) => value >= min).length;
+      const nextMin = milestoneStats[index + 1]?.min ?? 999999999;
       return `
-        <div class="stats-milestone-card">
+        <button type="button" class="stats-milestone-card" data-milestone-label="${escapeHtml(label)}" data-milestone-min="${min}" data-milestone-next="${nextMin}">
           <span class="stats-milestone-label">${label}</span>
           <span class="stats-milestone-value">${count}</span>
-        </div>
+        </button>
       `;
     })
     .join("");
@@ -7182,6 +7252,26 @@ showStatsButton?.addEventListener("click", () => {
   if (!(canShowLiveStats() || canShowPostGameStats())) return;
   setStatsPanelOpen(!statsPanelOpen);
 });
+statsPanelContentElement?.addEventListener("click", (event) => {
+  const target = event.target;
+  if (!(target instanceof Element)) return;
+  const card = target.closest(".stats-milestone-card");
+  if (!card) return;
+  const min = Number(card.getAttribute("data-milestone-min") || 0);
+  const nextMin = Number(card.getAttribute("data-milestone-next") || 999999999);
+  const label = card.getAttribute("data-milestone-label") || "Ficha";
+  const isSameCardOpen = !statsMilestonePopoverElement?.classList.contains("hidden")
+    && statsMilestonePopoverElement?.dataset.forLabel === label;
+  if (isSameCardOpen) {
+    closeStatsMilestonePopover();
+    return;
+  }
+  const entries = getMilestonePopoverEntries(min, nextMin);
+  if (statsMilestonePopoverElement) {
+    statsMilestonePopoverElement.dataset.forLabel = label;
+  }
+  openStatsMilestonePopover(card, label, entries);
+});
 closeStatsButton?.addEventListener("click", () => setStatsPanelOpen(false));
 shareStatsButton?.addEventListener("click", () => {
   if (!canShowPostGameStats()) return;
@@ -7299,6 +7389,13 @@ window.addEventListener("pointerdown", (event) => {
   const target = event.target;
   if (recordCardModalElement?.contains(target) || bestScoreCardElement?.contains(target)) return;
   setRecordCardModalOpen(false);
+});
+window.addEventListener("pointerdown", (event) => {
+  if (statsMilestonePopoverElement?.classList.contains("hidden")) return;
+  const target = event.target;
+  if (statsMilestonePopoverElement?.contains(target)) return;
+  if (target instanceof Element && target.closest(".stats-milestone-card")) return;
+  closeStatsMilestonePopover();
 });
 advancedToggleLabelElement?.addEventListener("mouseenter", () => setAdvancedToggleHintVisible(true));
 advancedToggleLabelElement?.addEventListener("mouseleave", () => setAdvancedToggleHintVisible(false));
