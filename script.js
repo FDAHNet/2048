@@ -3132,6 +3132,7 @@ function startGame(options = {}) {
     if (!hasAnyGlobalRecords(globalRecordsCache)) {
       renderGlobalRecordsLoading();
     }
+    updateRecordsMiniTicker(globalRecordsCache);
     fetchGlobalRecords();
   }
   setStatus(demoMode ? "MODO DEMO" : "");
@@ -3264,10 +3265,14 @@ function getCurrentMoveDuration() {
   return holeMode ? Math.max(6, Math.round(MOVE_DURATION / holeSpeedMultiplier)) : MOVE_DURATION;
 }
 
+function isHoleTurboMode() {
+  return holeMode && holeSpeedMultiplier >= 8;
+}
+
 function syncMoveDurationUI() {
   const boardFrame = getBoardFrameElement();
   if (!boardFrame || replayMode) return;
-  boardFrame.style.setProperty("--move-duration", `${getCurrentMoveDuration()}ms`);
+  boardFrame.style.setProperty("--move-duration", `${isHoleTurboMode() ? 0 : getCurrentMoveDuration()}ms`);
 }
 
 function updateHoleSpeedUI() {
@@ -3886,7 +3891,7 @@ function scheduleHoleMove() {
   if (!holeMode) return;
   if (holeTimer) window.clearTimeout(holeTimer);
   const holeSessionId = gameSessionId;
-  const holeDelay = Math.max(6, getCurrentMoveDuration());
+  const holeDelay = isHoleTurboMode() ? 0 : Math.max(6, getCurrentMoveDuration());
   holeTimer = window.setTimeout(() => {
     if (holeSessionId !== gameSessionId) return;
     holeTimer = null;
@@ -5016,9 +5021,8 @@ function scheduleNextRecordsMiniTickerStep() {
   clearRecordsMiniTickerTimer();
   if (!recordsMiniTickerEntries.length) return;
   const nextIndex = (recordsMiniTickerIndex + 1) % recordsMiniTickerEntries.length;
-  const completedLoop = nextIndex === 0;
   const entryDuration = renderRecordsMiniTickerEntry();
-  const delay = completedLoop ? Math.max(60000, entryDuration + 800) : entryDuration + 800;
+  const delay = entryDuration + 800;
   recordsMiniTickerTimer = window.setTimeout(() => {
     recordsMiniTickerIndex = nextIndex;
     scheduleNextRecordsMiniTickerStep();
@@ -6109,6 +6113,7 @@ function move(direction) {
 
   resetFlags();
   isAnimating = true;
+  const holeTurbo = isHoleTurboMode();
 
   const vectors = {
     up: [-1, 0],
@@ -6171,7 +6176,7 @@ function move(direction) {
         moved = true;
         hadMerge = true;
         highestMerge = Math.max(highestMerge, newValue);
-        if (newValue > 32) {
+        if (newValue > 32 && !holeTurbo) {
           scheduleEpicEffect(target);
           epicBursts.push({ row: target.row, col: target.col, value: newValue });
         }
@@ -6191,7 +6196,7 @@ function move(direction) {
   if (!moved) {
     gameState.cells = normalizeCells();
     render();
-    if (!demoMode) playBlockedSound();
+    if (!demoMode && !holeTurbo) playBlockedSound();
     isAnimating = false;
     if (demoMode) scheduleDemoMove();
     if (holeMode) scheduleHoleMove();
@@ -6199,11 +6204,13 @@ function move(direction) {
   }
 
   render();
-  mergeGhosts.forEach((ghost) => createMergeGhost(ghost));
-  if (hadMerge && !demoMode) {
+  if (!holeTurbo) {
+    mergeGhosts.forEach((ghost) => createMergeGhost(ghost));
+  }
+  if (hadMerge && !demoMode && !holeTurbo) {
     playMergeSound(highestMerge);
     if (highestMerge >= 128) playFanfare128();
-  } else if (!demoMode) {
+  } else if (!demoMode && !holeTurbo) {
     playMoveSound();
   }
 
@@ -6223,7 +6230,9 @@ function move(direction) {
       touchedCols.add(spawnedTile.col);
     }
     render();
-    highlightBoardCoordinates([...touchedRows], [...touchedCols]);
+    if (!holeTurbo) {
+      highlightBoardCoordinates([...touchedRows], [...touchedCols]);
+    }
     maybeCelebrateLiveGlobalRecord();
     const scoreBucket = Math.floor(gameState.score / 1000);
     const nextMoveNumber = moveSequence + 1;
@@ -6273,10 +6282,12 @@ function move(direction) {
     pushHistoryEntry(direction);
     persistSessionSnapshot();
 
-    epicBursts.forEach((entry) => createEpicBurst(entry.row, entry.col, entry.value));
-    epicBursts
-      .filter((entry) => entry.value > 64)
-      .forEach((entry) => addJournalEntry(entry.value, entry.row, entry.col));
+    if (!holeTurbo) {
+      epicBursts.forEach((entry) => createEpicBurst(entry.row, entry.col, entry.value));
+      epicBursts
+        .filter((entry) => entry.value > 64)
+        .forEach((entry) => addJournalEntry(entry.value, entry.row, entry.col));
+    }
 
     if (!gameState.won && hasTileAtLeast(2048)) {
       gameState.won = true;
@@ -6296,7 +6307,7 @@ function move(direction) {
     isAnimating = false;
     if (demoMode) scheduleDemoMove();
     if (holeMode) scheduleHoleMove();
-  }, getCurrentMoveDuration());
+  }, holeTurbo ? 0 : getCurrentMoveDuration());
 }
 
 function normalizeCells() {
