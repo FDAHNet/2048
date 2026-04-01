@@ -1956,9 +1956,13 @@ button:hover {
 
 .stats-milestone-popover {
   position: absolute;
-  z-index: 8;
+  z-index: 22;
   display: grid;
   gap: 10px;
+  width: min(320px, calc(100% - 28px));
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
   padding: 14px;
   border-radius: 16px;
   border: 1px solid rgba(255,255,255,0.14);
@@ -1972,11 +1976,31 @@ button:hover {
   display: none;
 }
 
+.stats-milestone-popover-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  padding: 0;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.14);
+  background: linear-gradient(135deg, #d62828, #a4161a);
+  color: #fff;
+  font-family: "Press Start 2P", "Space Grotesk", sans-serif;
+  font-size: 0.5rem;
+  line-height: 1;
+  display: grid;
+  place-items: center;
+}
+
 .stats-milestone-popover-title {
   font-family: "Press Start 2P", "Space Grotesk", sans-serif;
   font-size: 0.68rem;
   line-height: 1.4;
   color: var(--accent);
+  padding-right: 28px;
 }
 
 .stats-milestone-popover-body {

@@ -2394,6 +2394,12 @@ function openStatsMilestonePopover(cardElement, milestoneLabel, entries = []) {
   title.className = "stats-milestone-popover-title";
   title.textContent = milestoneLabel;
 
+  const closeButton = document.createElement("button");
+  closeButton.type = "button";
+  closeButton.className = "stats-milestone-popover-close";
+  closeButton.textContent = "X";
+  closeButton.addEventListener("click", () => closeStatsMilestonePopover(), { once: true });
+
   const body = document.createElement("div");
   body.className = "stats-milestone-popover-body";
 
@@ -2411,26 +2417,8 @@ function openStatsMilestonePopover(cardElement, milestoneLabel, entries = []) {
     });
   }
 
-  statsMilestonePopoverElement.replaceChildren(title, body);
+  statsMilestonePopoverElement.replaceChildren(closeButton, title, body);
   statsMilestonePopoverElement.classList.remove("hidden");
-
-  const cardRect = cardElement.getBoundingClientRect();
-  const shellRect = statsPanelElement?.querySelector(".stats-panel-shell")?.getBoundingClientRect();
-  if (!shellRect) return;
-
-  const desiredWidth = 280;
-  const left = Math.max(
-    12,
-    Math.min(
-      shellRect.width - desiredWidth - 12,
-      (cardRect.left - shellRect.left) + (cardRect.width / 2) - (desiredWidth / 2)
-    )
-  );
-  const top = Math.max(58, (cardRect.top - shellRect.top) - 12);
-
-  statsMilestonePopoverElement.style.width = `${desiredWidth}px`;
-  statsMilestonePopoverElement.style.left = `${Math.round(left)}px`;
-  statsMilestonePopoverElement.style.top = `${Math.round(top)}px`;
 }
 
 function restoreStatsMilestonePopover() {
