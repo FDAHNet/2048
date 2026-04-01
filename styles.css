@@ -1718,11 +1718,11 @@ button:hover {
   min-height: 0;
   max-height: 640px;
   display: block;
-  z-index: 55;
+  z-index: 230;
 }
 
 .stats-panel.is-postgame {
-  z-index: 90;
+  z-index: 260;
 }
 
 .stats-panel.hidden {
