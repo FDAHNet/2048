@@ -2426,6 +2426,13 @@ function openStatsMilestonePopover(cardElement, milestoneLabel, entries = []) {
 
   const body = document.createElement("div");
   body.className = "stats-milestone-popover-body";
+  body.style.height = "260px";
+  body.style.maxHeight = "260px";
+  body.style.minHeight = "260px";
+  body.style.overflowY = "auto";
+  body.style.overflowX = "hidden";
+  body.style.scrollbarWidth = "thin";
+  body.style.webkitOverflowScrolling = "touch";
 
   if (!entries.length) {
     const empty = document.createElement("div");
