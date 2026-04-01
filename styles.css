@@ -2024,8 +2024,8 @@ button:hover {
 .stats-milestone-popover {
   position: absolute;
   z-index: 22;
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  display: flex;
+  flex-direction: column;
   gap: 10px;
   width: min(320px, calc(100% - 28px));
   height: min(46vh, 360px);
@@ -2074,11 +2074,13 @@ button:hover {
 }
 
 .stats-milestone-popover-body {
-  display: grid;
-  align-content: start;
+  display: flex;
+  flex-direction: column;
   gap: 8px;
+  flex: 1 1 auto;
   min-height: 0;
-  overflow-y: auto;
+  overflow-y: scroll;
+  overscroll-behavior: contain;
   padding-right: 4px;
 }
 
